@@ -82,3 +82,5 @@ Banned dependencies are enforced by ESLint `no-restricted-imports` in `apps/web/
 ## Wave 0 → Wave 1
 
 Wave 0 ends when the smoke matrix above passes. Wave 1 (Identity and Tenancy) starts only after that. See `TS1/11-modules/03-BUILD-ORDER.md`.
+
+<!-- preview trigger 2026-05-14 -->
