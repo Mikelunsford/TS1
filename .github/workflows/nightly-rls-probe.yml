@@ -1,18 +1,19 @@
 name: Nightly RLS probe
 
-# Schedule trigger is intentionally disabled until Wave 1 ships the real
-# two-org RLS probe. The Wave 0 stub at apps/web/playwright/rls-probe.spec.ts
-# is a placeholder; running it nightly produces noise, not signal. To
-# re-enable a nightly cron after Wave 1, restore the `schedule:` block
-# below. See R-W0-04 / R-W0-05 in
-# 03-workspace/journal/2026-05-14-wave-0-closeout.md.
+# Wave 1 enabled the schedule. The spec at apps/web/playwright/rls-probe.spec.ts
+# now creates two ephemeral users + orgs via the service role, probes
+# cross-tenant access, and tears down. Requires the `staging` environment
+# to provide STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY, and
+# STAGING_SUPABASE_SERVICE_ROLE_KEY. Without those the spec skips with a
+# clear message — green gate with zero false positives, not green from
+# silently doing nothing.
 #
-# on:
-#   schedule:
-#     - cron: '0 9 * * *' # 09:00 UTC daily = 04:00 ET / 02:00 MT
-#   workflow_dispatch:
+# Run on a fresh staging project, NOT the prod project. The fixture
+# creates and deletes rows; pointing it at prod risks contaminating data.
 
 on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC daily = 04:00 ET / 02:00 MT
   workflow_dispatch:
 
 jobs:
@@ -40,6 +41,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
           VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Upload report on failure
         if: failure()
