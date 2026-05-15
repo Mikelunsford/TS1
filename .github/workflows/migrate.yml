@@ -36,20 +36,20 @@ jobs:
       - name: List pending migrations
         run: |
           supabase migration list \
-            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Apply migrations (forward-only)
         run: |
           supabase db push \
-            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Verify final migration count
         run: |
           supabase migration list \
-            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:6543/postgres"
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
