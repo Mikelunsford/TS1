@@ -55,6 +55,13 @@ jobs:
           VITE_DEFAULT_TENANT_BRAND: team1
           VITE_BASE_DOMAIN: team1.app
 
+      # R-W1-06 — bundle-size gate. Fails if the SPA index chunk exceeds 80
+      # kB gzipped. Config: apps/web/.size-limit.cjs. Wave 1 closeout
+      # measured 29.23 kB; the 80 kB budget leaves headroom for Wave 2's
+      # CRM surface.
+      - name: Bundle-size budget (R-W1-06)
+        run: pnpm bundle-budget
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

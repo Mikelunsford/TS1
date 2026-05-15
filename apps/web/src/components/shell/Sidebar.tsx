@@ -1,25 +1,28 @@
 import { NavLink } from 'react-router-dom';
 import {
+  Activity,
   BarChart3,
   Boxes,
+  Briefcase,
   ClipboardList,
+  Contact,
   FileText,
   Home,
   Receipt,
   Settings,
+  Sparkles,
   Truck,
   Users,
   Wallet,
 } from 'lucide-react';
 
+import { cn } from '@/lib/format';
+
 /**
  * Sidebar — primary module navigation.
  *
  * Modules per /03-workspace/04-GLOSSARY.md and /11-modules/00-MODULE-CATALOG.md.
- * Wave 1 only ships the home route; the rest are placeholders that route
- * to /404 until their respective waves land. This is intentional: the nav
- * surface needs to be visible from Wave 1 so the empty-state design and
- * RBAC gating can be reviewed early.
+ * Wave 2 lights up the CRM module with five sub-routes.
  */
 
 interface NavItem {
@@ -29,11 +32,23 @@ interface NavItem {
   disabled?: boolean;
   /** Wave the route lands in. Used in tooltips on disabled items. */
   wave?: number;
+  children?: Array<{ to: string; label: string; icon: typeof Home }>;
 }
 
 const items: NavItem[] = [
   { to: '/', label: 'Home', icon: Home },
-  { to: '/crm', label: 'CRM', icon: Users, disabled: true, wave: 2 },
+  {
+    to: '/crm',
+    label: 'CRM',
+    icon: Users,
+    children: [
+      { to: '/crm/customers', label: 'Customers', icon: Users },
+      { to: '/crm/contacts', label: 'Contacts', icon: Contact },
+      { to: '/crm/leads', label: 'Leads', icon: Sparkles },
+      { to: '/crm/opportunities', label: 'Opportunities', icon: Briefcase },
+      { to: '/crm/activities', label: 'Activities', icon: Activity },
+    ],
+  },
   { to: '/quotes', label: 'Quotes', icon: FileText, disabled: true, wave: 3 },
   { to: '/projects', label: 'Projects', icon: ClipboardList, disabled: true, wave: 3 },
   { to: '/invoices', label: 'Invoices', icon: Receipt, disabled: true, wave: 3 },
@@ -66,22 +81,47 @@ export function Sidebar() {
           );
         }
         return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm',
-                isActive
-                  ? 'bg-bg text-fg ring-1 ring-border-strong'
-                  : 'text-fg-muted hover:bg-bg hover:text-fg',
-              ].join(' ')
-            }
-          >
-            <Icon className="h-4 w-4" />
-            {item.label}
-          </NavLink>
+          <div key={item.to} className="flex flex-col gap-0.5">
+            <NavLink
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm',
+                  isActive
+                    ? 'bg-bg text-fg ring-1 ring-border-strong'
+                    : 'text-fg-muted hover:bg-bg hover:text-fg',
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </NavLink>
+            {item.children && (
+              <div className="ml-6 flex flex-col gap-0.5 border-l border-border pl-2">
+                {item.children.map((child) => {
+                  const ChildIcon = child.icon;
+                  return (
+                    <NavLink
+                      key={child.to}
+                      to={child.to}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
+                          isActive
+                            ? 'bg-bg text-fg ring-1 ring-border-strong'
+                            : 'text-fg-muted hover:bg-bg hover:text-fg',
+                        )
+                      }
+                    >
+                      <ChildIcon className="h-3.5 w-3.5" />
+                      {child.label}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         );
       })}
     </nav>

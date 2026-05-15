@@ -16,6 +16,7 @@
     "test:rls": "pnpm --filter web test:rls",
     "lint": "pnpm --filter web lint",
     "typecheck": "pnpm -r typecheck",
+    "bundle-budget": "pnpm --filter web bundle-budget",
     "format": "prettier --write .",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
