@@ -18,6 +18,12 @@ const ActivitiesFeedPage = lazy(() => import('./pages/crm/ActivitiesFeedPage'));
 const LeadsPage = lazy(() => import('./pages/crm/LeadsPage'));
 const OpportunitiesPage = lazy(() => import('./pages/crm/OpportunitiesPage'));
 
+// Items (Wave 3) — FE-A owns this block.
+const ItemsListPage = lazy(() => import('./pages/items/ItemsListPage'));
+const ItemDetailPage = lazy(() => import('./pages/items/ItemDetailPage'));
+const ItemCategoriesPage = lazy(() => import('./pages/items/ItemCategoriesPage'));
+// end items lazy.
+
 function PageFallback() {
   return (
     <div className="flex h-screen items-center justify-center text-fg-muted">Loading…</div>
@@ -94,6 +100,32 @@ export function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        {/* Items (Wave 3) — FE-A owns this block. */}
+        <Route
+          path="/items"
+          element={
+            <ProtectedRoute>
+              <ItemsListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/items/categories"
+          element={
+            <ProtectedRoute>
+              <ItemCategoriesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/items/:id"
+          element={
+            <ProtectedRoute>
+              <ItemDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end items routes. */}
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
