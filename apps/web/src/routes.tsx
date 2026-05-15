@@ -8,6 +8,16 @@ const SignIn = lazy(() => import('./pages/SignIn'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
+// CRM (Wave 2) — FE-A owns customers/contacts/activities; FE-B owns
+// leads/opportunities (merged via PR #21).
+const CrmIndexRedirect = lazy(() => import('./pages/crm/CrmIndexRedirect'));
+const CustomersListPage = lazy(() => import('./pages/crm/CustomersListPage'));
+const CustomerDetailPage = lazy(() => import('./pages/crm/CustomerDetailPage'));
+const ContactsListPage = lazy(() => import('./pages/crm/ContactsListPage'));
+const ActivitiesFeedPage = lazy(() => import('./pages/crm/ActivitiesFeedPage'));
+const LeadsPage = lazy(() => import('./pages/crm/LeadsPage'));
+const OpportunitiesPage = lazy(() => import('./pages/crm/OpportunitiesPage'));
+
 function PageFallback() {
   return (
     <div className="flex h-screen items-center justify-center text-fg-muted">Loading…</div>
@@ -25,6 +35,62 @@ export function AppRoutes() {
           element={
             <ProtectedRoute>
               <PlaceholderHome />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm"
+          element={
+            <ProtectedRoute>
+              <CrmIndexRedirect />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/customers"
+          element={
+            <ProtectedRoute>
+              <CustomersListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/customers/:id"
+          element={
+            <ProtectedRoute>
+              <CustomerDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/contacts"
+          element={
+            <ProtectedRoute>
+              <ContactsListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/leads"
+          element={
+            <ProtectedRoute>
+              <LeadsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/opportunities"
+          element={
+            <ProtectedRoute>
+              <OpportunitiesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/activities"
+          element={
+            <ProtectedRoute>
+              <ActivitiesFeedPage />
             </ProtectedRoute>
           }
         />
