@@ -774,3 +774,408 @@ export type ItemCreate = z.infer<typeof ItemCreateSchema>;
 /** Patch body for `PATCH /inventory-api/items/:id`. All keys optional. */
 export const ItemPatchSchema = ItemCreateSchema.partial();
 export type ItemPatch = z.infer<typeof ItemPatchSchema>;
+
+// =========================================================================
+// Quoting + Projects — workflow enums (Wave 4 / Phase 4 + 5)
+// =========================================================================
+
+/**
+ * Quote state — prod `quote_state` enum (verified 2026-05-15,
+ * schema_migrations=0050). The Wave 4 dispatch text proposed extra states
+ * (sent / accepted / declined / converted_to_project) that DO NOT exist on
+ * the enum; R-W4-PF-01 (closed) documents the reconcile.
+ */
+export const QuoteStateSchema = z.enum([
+  'draft',
+  'submitted',
+  'revise_requested',
+  'approved',
+  'project_pending',
+  'cancelled',
+]);
+export type QuoteState = z.infer<typeof QuoteStateSchema>;
+
+/** Quote origin — prod `quote_origin` enum. Defaults to `management`. */
+export const QuoteOriginSchema = z.enum(['management', 'customer_intake']);
+export type QuoteOrigin = z.infer<typeof QuoteOriginSchema>;
+
+/** Quote mode — prod `quote_mode` enum. */
+export const QuoteModeSchema = z.enum([
+  'new_quote',
+  'revision',
+  'reorder',
+  'feasibility_only',
+  'scope_shift',
+]);
+export type QuoteMode = z.infer<typeof QuoteModeSchema>;
+
+/** Quote service type — prod `service_type` enum (3PL surface). */
+export const QuoteServiceTypeSchema = z.enum(['co_pack', 'cross_dock']);
+export type QuoteServiceType = z.infer<typeof QuoteServiceTypeSchema>;
+
+/** Project state — prod `project_state` enum. */
+export const ProjectStateSchema = z.enum([
+  'pending',
+  'ready_to_build',
+  'in_production',
+  'ready_to_ship',
+  'completed',
+  'cancelled',
+]);
+export type ProjectState = z.infer<typeof ProjectStateSchema>;
+
+/** Phase status — `project_phases.status` text CHECK constraint values. */
+export const PhaseStatusSchema = z.enum([
+  'pending',
+  'active',
+  'completed',
+  'cancelled',
+]);
+export type PhaseStatus = z.infer<typeof PhaseStatusSchema>;
+
+// =========================================================================
+// Quoting — Quotes (Wave 4)
+// =========================================================================
+
+/**
+ * Quote row. Reflects the prod `public.quotes` shape after migration 0050.
+ * Notes:
+ *   - `customer_name` is denormalized NOT NULL on the DB (stamped at create).
+ *   - There are no `contact_id` / `tax_inclusive` / `discount_pct` / `terms` /
+ *     `notes_internal` / `notes_customer` / `sent_at` / `accepted_at` columns;
+ *     the dispatch text proposed them but the cloud table does not have them.
+ *   - `tax_rate_snapshot` is `numeric(7,6)` decimal in [0,1] (R-W3-03 close).
+ */
+export const QuoteSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  quote_number: z.string().min(1),
+  customer_id: UuidSchema,
+  customer_name: z.string().min(1),
+  contact_name: z.string().nullable(),
+  contact_email: z.string().nullable(),
+  service_type: QuoteServiceTypeSchema,
+  status: QuoteStateSchema,
+  origin: QuoteOriginSchema,
+  mode: QuoteModeSchema,
+  materials_only: z.boolean(),
+  requires_approval: z.boolean(),
+  job_type_id: UuidSchema.nullable(),
+  opportunity_id: UuidSchema.nullable(),
+  project_id: UuidSchema.nullable(),
+  currency_code: z.string().length(3),
+  exchange_rate: z.union([z.number(), z.string()]).nullable(),
+  tax_id: UuidSchema.nullable(),
+  tax_rate_snapshot: z.union([z.number(), z.string()]).nullable(),
+  subtotal_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  total_cents: CentsSchema,
+  notes: z.string().nullable(),
+  valid_until: z.string().nullable(),
+  state_changed_at: TimestampSchema,
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Quote = z.infer<typeof QuoteSchema>;
+
+/** Request body for `POST /quotes-api/quotes` (creates a draft). */
+export const QuoteCreateSchema = z.object({
+  customer_id: UuidSchema,
+  customer_name: z.string().min(1).max(200),
+  contact_name: z.string().max(200).nullable().optional(),
+  contact_email: z.string().email().nullable().optional(),
+  service_type: QuoteServiceTypeSchema,
+  origin: QuoteOriginSchema.default('management'),
+  mode: QuoteModeSchema.default('new_quote'),
+  materials_only: z.boolean().default(false),
+  job_type_id: UuidSchema.nullable().optional(),
+  opportunity_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  tax_id: UuidSchema.nullable().optional(),
+  notes: z.string().nullable().optional(),
+  valid_until: TimestampSchema.nullable().optional(),
+});
+export type QuoteCreate = z.infer<typeof QuoteCreateSchema>;
+
+/** Request body for `PATCH /quotes-api/quotes/:id`. Only allowed while draft. */
+export const QuotePatchSchema = QuoteCreateSchema.partial();
+export type QuotePatch = z.infer<typeof QuotePatchSchema>;
+
+/** Empty body acceptable for /submit, /approve. The wire still posts `{}`. */
+export const QuoteSubmitSchema = z.object({}).strict();
+export type QuoteSubmit = z.infer<typeof QuoteSubmitSchema>;
+
+export const QuoteApproveSchema = z.object({}).strict();
+export type QuoteApprove = z.infer<typeof QuoteApproveSchema>;
+
+/** Reason text for revise / decline. */
+export const QuoteRequestRevisionsSchema = z.object({
+  reason: z.string().min(1).max(2000),
+});
+export type QuoteRequestRevisions = z.infer<typeof QuoteRequestRevisionsSchema>;
+
+export const QuoteDeclineSchema = z.object({
+  reason: z.string().min(1).max(2000),
+});
+export type QuoteDecline = z.infer<typeof QuoteDeclineSchema>;
+
+/** Body for `/send` and `/accept` — no state change; activity row only. */
+export const QuoteSendSchema = z.object({
+  to_email: z.string().email().optional(),
+  message: z.string().max(8000).optional(),
+});
+export type QuoteSend = z.infer<typeof QuoteSendSchema>;
+
+export const QuoteAcceptSchema = z.object({
+  note: z.string().max(2000).optional(),
+});
+export type QuoteAccept = z.infer<typeof QuoteAcceptSchema>;
+
+/**
+ * Body for `POST /quotes/:id/convert-to-project`. Calls the existing
+ * `convert_quote_to_project(uuid, text, timestamptz)` SECURITY DEFINER RPC.
+ */
+export const QuoteConvertSchema = z.object({
+  project_name: z.string().min(1).max(200),
+  due_date: TimestampSchema.nullable().optional(),
+});
+export type QuoteConvert = z.infer<typeof QuoteConvertSchema>;
+
+/** Body for `POST /quotes/:id/duplicate`. Empty; server clones the quote. */
+export const QuoteDuplicateSchema = z.object({}).strict();
+export type QuoteDuplicate = z.infer<typeof QuoteDuplicateSchema>;
+
+// =========================================================================
+// Quoting — Quote Versions (Wave 4)
+// =========================================================================
+
+/**
+ * Quote version mirror row. Populated by the `create_v1_for_quote` AFTER
+ * INSERT trigger + `mirror_quote_to_current_version` AFTER UPDATE trigger
+ * (regenerated in migration 0050).
+ */
+export const QuoteVersionSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  quote_id: UuidSchema,
+  version_number: z.number().int().nonnegative(),
+  status: QuoteStateSchema,
+  service_type: QuoteServiceTypeSchema,
+  mode: QuoteModeSchema,
+  materials_only: z.boolean(),
+  requires_approval: z.boolean(),
+  job_type_id: UuidSchema.nullable(),
+  opportunity_id: UuidSchema.nullable(),
+  currency_code: z.string().length(3),
+  exchange_rate: z.union([z.number(), z.string()]).nullable(),
+  tax_id: UuidSchema.nullable(),
+  tax_rate_snapshot: z.union([z.number(), z.string()]).nullable(),
+  subtotal_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  total_cents: CentsSchema,
+  notes: z.string().nullable(),
+  valid_until: z.string().nullable(),
+  created_at: TimestampSchema,
+});
+export type QuoteVersion = z.infer<typeof QuoteVersionSchema>;
+
+// =========================================================================
+// Quoting — Quote Line Items (Wave 4)
+// =========================================================================
+
+/**
+ * Quote line row. Prod columns: `quantity` numeric, `unit` text (free-form,
+ * not `unit_id`), `discount_cents`, `tax_amount_cents`, `tax_rate_snapshot`,
+ * `line_total_cents`. No `updated_at` column. The `item_id` rename (was
+ * `pricing_item_id` pre-0050) is the new normal.
+ */
+export const QuoteLineSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  quote_id: UuidSchema,
+  quote_version_id: UuidSchema.nullable(),
+  item_id: UuidSchema.nullable(),
+  description: z.string().min(1),
+  quantity: z.union([z.number(), z.string()]),
+  unit: z.string().nullable(),
+  unit_price_cents: CentsSchema,
+  unit_cost_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  tax_id: UuidSchema.nullable(),
+  tax_rate_snapshot: z.union([z.number(), z.string()]).nullable(),
+  tax_amount_cents: CentsSchema,
+  line_total_cents: CentsSchema,
+  position: z.number().int().nonnegative(),
+  created_at: TimestampSchema,
+});
+export type QuoteLine = z.infer<typeof QuoteLineSchema>;
+
+/** Body for inserting / updating a single line. */
+export const QuoteLineUpsertSchema = z.object({
+  item_id: UuidSchema.nullable().optional(),
+  description: z.string().min(1).max(500),
+  quantity: z.number().positive(),
+  unit: z.string().max(40).nullable().optional(),
+  unit_price_cents: z.number().int().nonnegative(),
+  unit_cost_cents: z.number().int().nonnegative().default(0),
+  discount_cents: z.number().int().nonnegative().default(0),
+  tax_id: UuidSchema.nullable().optional(),
+  position: z.number().int().nonnegative(),
+});
+export type QuoteLineUpsert = z.infer<typeof QuoteLineUpsertSchema>;
+
+/**
+ * Bulk-replace body. The handler deletes every existing line for the quote
+ * and inserts the supplied set (per F-Wave4-13: legacy
+ * `replace_quote_line_items` RPC stays dormant). After replace, the handler
+ * recomputes parent quote totals via `taxTotalCents` and stamps the header.
+ */
+export const QuoteLineReplaceSchema = z.object({
+  lines: z.array(QuoteLineUpsertSchema).max(500),
+});
+export type QuoteLineReplace = z.infer<typeof QuoteLineReplaceSchema>;
+
+/** Reorder payload — array of line ids in their new order. */
+export const QuoteLineReorderSchema = z.object({
+  line_ids: z.array(UuidSchema).min(1).max(500),
+});
+export type QuoteLineReorder = z.infer<typeof QuoteLineReorderSchema>;
+
+// =========================================================================
+// Projects (Wave 4 / Phase 5)
+// =========================================================================
+
+/**
+ * Project row. Reflects the prod `public.projects` shape. Notes:
+ *   - DB column is `name` (not `display_name`); SPA renames at the boundary
+ *     for parity with the dispatch's preferred verb is optional — current
+ *     pattern leaves DB-named columns wire-visible (consistent with
+ *     `customers.display_name → customers.name` open carryover F-Wave4-09).
+ *   - DB has the full project_state lifecycle stamps already:
+ *     bom_finalized_at, ready_to_build_at, sent_to_production_at,
+ *     production_started_at, production_completed_at, ready_to_ship_at,
+ *     shipping_completed_at. Handlers stamp the relevant one on each
+ *     transition.
+ *   - `quote_id` is the source-quote FK (not `source_quote_id`).
+ */
+export const ProjectSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  project_number: z.string().min(1),
+  quote_id: UuidSchema.nullable(),
+  customer_id: UuidSchema.nullable(),
+  customer_name: z.string().nullable(),
+  name: z.string().min(1),
+  status: ProjectStateSchema,
+  currency_code: z.string().length(3),
+  total_cents: CentsSchema,
+  budget_cents: CentsSchema,
+  due_date: z.string().nullable(),
+  invoice_id: UuidSchema.nullable(),
+  bom_finalized_at: z.string().nullable(),
+  bom_finalized_by: UuidSchema.nullable(),
+  ready_to_build_at: z.string().nullable(),
+  sent_to_production_at: z.string().nullable(),
+  production_started_at: z.string().nullable(),
+  production_completed_at: z.string().nullable(),
+  ready_to_ship_at: z.string().nullable(),
+  shipping_completed_at: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Project = z.infer<typeof ProjectSchema>;
+
+/** Body for `POST /projects-api/projects` — direct create (rare; usually quote-convert). */
+export const ProjectCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  customer_id: UuidSchema.nullable().optional(),
+  customer_name: z.string().max(200).nullable().optional(),
+  quote_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  total_cents: z.number().int().nonnegative().default(0),
+  budget_cents: z.number().int().nonnegative().default(0),
+  due_date: TimestampSchema.nullable().optional(),
+});
+export type ProjectCreate = z.infer<typeof ProjectCreateSchema>;
+
+/** Body for `PATCH /projects-api/projects/:id`. All keys optional. */
+export const ProjectPatchSchema = ProjectCreateSchema.partial();
+export type ProjectPatch = z.infer<typeof ProjectPatchSchema>;
+
+/** Body for `POST /projects/:id/close`. */
+export const ProjectCloseSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+export type ProjectClose = z.infer<typeof ProjectCloseSchema>;
+
+/**
+ * Body for `POST /projects/:id/reopen`. Reopen drops the project back to
+ * the most-recent pre-completion stamp (in_production by default, or
+ * ready_to_ship if the project completed via ship-out). Caller may force
+ * the target state if their UI knows better.
+ */
+export const ProjectReopenSchema = z.object({
+  to: z.enum(['in_production', 'ready_to_ship']).default('in_production'),
+});
+export type ProjectReopen = z.infer<typeof ProjectReopenSchema>;
+
+// =========================================================================
+// Project Phases (Wave 4 / Phase 5)
+// =========================================================================
+
+/**
+ * Project phase row. Prod table `project_phases` from migration 0042;
+ * `status` is text + CHECK (not an enum). `planned_*_at` and `actual_*_at`
+ * are timestamptz on the DB.
+ */
+export const ProjectPhaseSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  project_id: UuidSchema,
+  position: z.number().int().nonnegative(),
+  name: z.string().min(1),
+  description: z.string().nullable(),
+  status: PhaseStatusSchema,
+  planned_start_at: z.string().nullable(),
+  planned_end_at: z.string().nullable(),
+  actual_start_at: z.string().nullable(),
+  actual_end_at: z.string().nullable(),
+  budget_cents: CentsSchema,
+  notes: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ProjectPhase = z.infer<typeof ProjectPhaseSchema>;
+
+/** Body for `POST /projects/:project_id/phases`. */
+export const ProjectPhaseCreateSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(2000).nullable().optional(),
+  position: z.number().int().nonnegative(),
+  planned_start_at: TimestampSchema.nullable().optional(),
+  planned_end_at: TimestampSchema.nullable().optional(),
+  budget_cents: z.number().int().nonnegative().default(0),
+  notes: z.string().max(8000).nullable().optional(),
+});
+export type ProjectPhaseCreate = z.infer<typeof ProjectPhaseCreateSchema>;
+
+/** Body for `PATCH /projects/:project_id/phases/:phase_id`. */
+export const ProjectPhasePatchSchema = ProjectPhaseCreateSchema.partial();
+export type ProjectPhasePatch = z.infer<typeof ProjectPhasePatchSchema>;
+
+/** Body for `POST /projects/:project_id/phases/reorder`. */
+export const ProjectPhaseReorderSchema = z.object({
+  phase_ids: z.array(UuidSchema).min(1).max(200),
+});
+export type ProjectPhaseReorder = z.infer<typeof ProjectPhaseReorderSchema>;
+
+/**
+ * Body for `PUT /projects/:project_id/phases/:phase_id/status`. The state
+ * machine validator (`assertTransition('phase', ...)`) gates the change.
+ */
+export const ProjectPhaseStatusUpdateSchema = z.object({
+  status: PhaseStatusSchema,
+});
+export type ProjectPhaseStatusUpdate = z.infer<typeof ProjectPhaseStatusUpdateSchema>;
