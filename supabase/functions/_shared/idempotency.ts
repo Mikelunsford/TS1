@@ -129,12 +129,14 @@ export async function withIdempotency(
 
   const admin = createAdminClient();
 
-  // The on-cloud `idempotency_keys` shape carries legacy NOT-NULL columns
-  // (`endpoint`, `request_hash`, `response`) alongside the Wave-1 `route_hash`,
-  // `body_hash`, `response_jsonb` columns added for the architecture-spec
-  // semantics. PK is (key, user_id); org_id is enforced via RLS. We populate
-  // both column sets on insert until a future migration drops the legacy
-  // shape.
+  // The on-cloud `idempotency_keys` shape carries three pre-Wave-0 columns
+  // (`endpoint`, `request_hash`, `response`) alongside the Wave-1
+  // architecture-spec columns (`route_hash`, `body_hash`, `response_jsonb`).
+  // Migration 0048 (Wave 3) relaxed NOT NULL + added empty defaults on the
+  // three legacy columns; this helper no longer writes them. A future
+  // migration (F-Wave3-01-b, Wave 4) drops the legacy columns once one
+  // release cycle confirms zero writers. PK is (key, user_id); org_id is
+  // enforced via RLS.
   const { data: existing, error: lookupErr } = await admin
     .from('idempotency_keys')
     .select('org_id, route_hash, body_hash, status_code, response_jsonb, created_at')
@@ -178,16 +180,13 @@ export async function withIdempotency(
 
   const fresh = await handler();
 
-  const url2 = new URL(ctx.req.url);
+  // Architecture-spec columns only. The legacy columns (`endpoint`,
+  // `request_hash`, `response`) are filled by their post-0048 defaults
+  // ('', '', '{}'::jsonb); they're queued for drop in F-Wave3-01-b.
   const upsertRow = {
     key,
     user_id: ctx.org.userId,
     org_id: ctx.org.orgId,
-    // Legacy NOT-NULL columns (filled with the same semantic value):
-    endpoint: `${ctx.req.method} ${url2.pathname}`,
-    request_hash: bodyHash,
-    response: fresh.body as Record<string, unknown>,
-    // Architecture-spec columns:
     route_hash: routeHash,
     body_hash: bodyHash,
     response_jsonb: fresh.body as Record<string, unknown>,
