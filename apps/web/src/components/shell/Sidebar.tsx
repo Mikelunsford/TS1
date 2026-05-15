@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/format';
+import { useCapabilities } from '@/lib/hooks/useCapabilities';
 
 /**
  * Sidebar — primary module navigation.
@@ -35,6 +36,9 @@ interface NavItem {
   disabled?: boolean;
   /** Wave the route lands in. Used in tooltips on disabled items. */
   wave?: number;
+  /** Cap required to show this item. Omitted = always show (for the rest of
+   *  the modules; they will be cap-gated as their pages land). */
+  requireCap?: string;
   children?: Array<{ to: string; label: string; icon: typeof Home }>;
 }
 
@@ -52,7 +56,7 @@ const items: NavItem[] = [
       { to: '/crm/activities', label: 'Activities', icon: Activity },
     ],
   },
-  { to: '/quotes', label: 'Quotes', icon: FileText, disabled: true, wave: 3 },
+  { to: '/quotes', label: 'Quotes', icon: FileText, requireCap: 'quotes.read' },
   { to: '/projects', label: 'Projects', icon: ClipboardList, disabled: true, wave: 3 },
   { to: '/invoices', label: 'Invoices', icon: Receipt, disabled: true, wave: 3 },
   {
@@ -81,6 +85,7 @@ const items: NavItem[] = [
 ];
 
 export function Sidebar() {
+  const { can } = useCapabilities();
   return (
     <nav
       className="flex w-56 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4"
@@ -88,6 +93,9 @@ export function Sidebar() {
     >
       {items.map((item) => {
         const Icon = item.icon;
+        if (item.requireCap && !can(item.requireCap)) {
+          return null;
+        }
         if (item.disabled) {
           return (
             <span
