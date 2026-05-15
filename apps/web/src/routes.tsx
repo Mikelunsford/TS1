@@ -24,6 +24,12 @@ const ItemDetailPage = lazy(() => import('./pages/items/ItemDetailPage'));
 const ItemCategoriesPage = lazy(() => import('./pages/items/ItemCategoriesPage'));
 // end items lazy.
 
+// Quotes (Wave 4 / 4.3a) — FE-A owns this block.
+const QuotesListPage = lazy(() => import('./pages/quotes/QuotesListPage'));
+const QuoteCreatePage = lazy(() => import('./pages/quotes/QuoteCreatePage'));
+const QuoteDetailPage = lazy(() => import('./pages/quotes/QuoteDetailPage'));
+// end quotes lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -134,6 +140,32 @@ export function AppRoutes() {
           }
         />
         {/* end items routes. */}
+        {/* Quotes (Wave 4 / 4.3a) — FE-A owns this block. */}
+        <Route
+          path="/quotes"
+          element={
+            <ProtectedRoute>
+              <QuotesListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/quotes/new"
+          element={
+            <ProtectedRoute>
+              <QuoteCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/quotes/:id"
+          element={
+            <ProtectedRoute>
+              <QuoteDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end quotes routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"
