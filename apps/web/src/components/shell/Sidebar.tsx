@@ -6,12 +6,14 @@ import {
   Briefcase,
   ClipboardList,
   Contact,
+  CreditCard,
   FileText,
   FolderTree,
   Home,
   Receipt,
   Settings,
   Sparkles,
+  TrendingUp,
   Truck,
   Users,
   Wallet,
@@ -65,7 +67,17 @@ const items: NavItem[] = [
   { to: '/procurement', label: 'Procurement', icon: Truck, disabled: true, wave: 4 },
   { to: '/finance', label: 'Finance', icon: Wallet, disabled: true, wave: 6 },
   { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 6 },
-  { to: '/settings', label: 'Settings', icon: Settings, disabled: true, wave: 1 },
+  {
+    to: '/settings',
+    label: 'Settings',
+    icon: Settings,
+    children: [
+      { to: '/settings/currencies', label: 'Currencies', icon: Wallet },
+      { to: '/settings/taxes', label: 'Taxes', icon: Receipt },
+      { to: '/settings/payment-methods', label: 'Payment methods', icon: CreditCard },
+      { to: '/settings/exchange-rates', label: 'Exchange rates', icon: TrendingUp },
+    ],
+  },
 ];
 
 export function Sidebar() {
