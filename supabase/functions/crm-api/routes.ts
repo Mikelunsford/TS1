@@ -1,9 +1,46 @@
 /**
  * crm-api — route table.
+ *
+ * Wave 2: ships customers, contacts, leads, opportunities, activities.
+ * See TS1/09-api/00-API-CONTRACT.md §3.
  */
 
 import type { Route } from '../_shared/route.ts';
 import { ok } from '../_shared/responses.ts';
+import {
+  archiveCustomer,
+  createCustomer,
+  getCustomer,
+  listCustomers,
+  patchCustomer,
+  restoreCustomer,
+} from './handlers/customers.ts';
+import {
+  createContact,
+  deleteContact,
+  getContact,
+  listContacts,
+  patchContact,
+} from './handlers/contacts.ts';
+import {
+  convertLead,
+  createLead,
+  getLead,
+  listLeads,
+  patchLead,
+} from './handlers/leads.ts';
+import {
+  createOpportunity,
+  getOpportunity,
+  listOpportunities,
+  patchOpportunity,
+  updateOpportunityStage,
+} from './handlers/opportunities.ts';
+import {
+  createActivity,
+  listActivities,
+  patchActivity,
+} from './handlers/activities.ts';
 
 const BUNDLE = 'crm-api';
 
@@ -13,41 +50,38 @@ export const routes: Route[] = [
     path: '/',
     handler: ({ req }) => ok({ ok: true, bundle: BUNDLE }, undefined, { req }),
   },
-  // TODO Wave 1+: per TS1/09-api/01-EDGE-FUNCTIONS-MAP.md §2.4
-  //   GET    /customers                              — list with filters: q, status, tag, kind
-  //   POST   /customers                              — create
-  //   GET    /customers/:id                          — detail
-  //   PATCH  /customers/:id                          — update
-  //   POST   /customers/:id/archive                  — soft-delete
-  //   POST   /customers/:id/restore                  — undo archive
-  //   GET    /customers/:id/comments                 — list comments
-  //   POST   /customers/:id/comments                 — add comment (emits mentions)
-  //   GET    /customers/:id/attachments              — list attachments
-  //   POST   /customers/:id/attachments/sign-upload  — signed PUT URL
-  //   DELETE /customers/:id/attachments/:att_id      — remove attachment
-  //
-  //   GET    /contacts?customer_id=...               — list contacts
-  //   POST   /contacts                               — create
-  //   GET    /contacts/:id                           — detail
-  //   PATCH  /contacts/:id                           — update
-  //   DELETE /contacts/:id                           — hard-delete
-  //
-  //   GET    /leads                                  — list with status, owner, source
-  //   POST   /leads                                  — create
-  //   GET    /leads/:id                              — detail
-  //   PATCH  /leads/:id                              — update
-  //   POST   /leads/:id/qualify                      — transition new -> qualified
-  //   POST   /leads/:id/disqualify                   — transition to disqualified
-  //
-  //   GET    /opportunities                          — kanban pull by stage
-  //   POST   /opportunities                          — create
-  //   GET    /opportunities/:id                      — detail
-  //   PATCH  /opportunities/:id                      — update incl. stage move
-  //   POST   /opportunities/:id/win                  — mark won, optionally create quote
-  //   POST   /opportunities/:id/lose                 — mark lost
-  //
-  //   GET    /activities?entity_type=&entity_id=     — polymorphic timeline
-  //   POST   /activities                             — log call/meeting/email/note
-  //   PATCH  /activities/:id                         — edit
-  //   DELETE /activities/:id                         — remove
+
+  // Customers
+  { method: 'GET', path: '/customers', handler: listCustomers },
+  { method: 'POST', path: '/customers', handler: createCustomer },
+  { method: 'GET', path: '/customers/:id', handler: getCustomer },
+  { method: 'PATCH', path: '/customers/:id', handler: patchCustomer },
+  { method: 'POST', path: '/customers/:id/archive', handler: archiveCustomer },
+  { method: 'POST', path: '/customers/:id/restore', handler: restoreCustomer },
+
+  // Contacts
+  { method: 'GET', path: '/contacts', handler: listContacts },
+  { method: 'POST', path: '/contacts', handler: createContact },
+  { method: 'GET', path: '/contacts/:id', handler: getContact },
+  { method: 'PATCH', path: '/contacts/:id', handler: patchContact },
+  { method: 'DELETE', path: '/contacts/:id', handler: deleteContact },
+
+  // Leads
+  { method: 'GET', path: '/leads', handler: listLeads },
+  { method: 'POST', path: '/leads', handler: createLead },
+  { method: 'GET', path: '/leads/:id', handler: getLead },
+  { method: 'PATCH', path: '/leads/:id', handler: patchLead },
+  { method: 'POST', path: '/leads/:id/convert', handler: convertLead },
+
+  // Opportunities
+  { method: 'GET', path: '/opportunities', handler: listOpportunities },
+  { method: 'POST', path: '/opportunities', handler: createOpportunity },
+  { method: 'GET', path: '/opportunities/:id', handler: getOpportunity },
+  { method: 'PATCH', path: '/opportunities/:id', handler: patchOpportunity },
+  { method: 'PUT', path: '/opportunities/:id/stage', handler: updateOpportunityStage },
+
+  // Activities
+  { method: 'GET', path: '/activities', handler: listActivities },
+  { method: 'POST', path: '/activities', handler: createActivity },
+  { method: 'PATCH', path: '/activities/:id', handler: patchActivity },
 ];
