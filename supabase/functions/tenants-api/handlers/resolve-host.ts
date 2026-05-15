@@ -36,7 +36,13 @@ export async function resolveHost({ req, url }: Ctx): Promise<Response> {
   const cleanHost = host.split(':')[0].toLowerCase();
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+
+  // PostgREST nested-select needs a direct FK between the embedding tables.
+  // `org_domains.org_id → organizations.id` is direct; `org_branding.org_id`
+  // also goes to `organizations.id` but PostgREST can't infer the org_domains
+  // → org_branding path because there's no direct FK between them. Two
+  // queries; the in-isolate cache (architecture §4.5) absorbs the cost.
+  const { data: domainRow, error: domainErr } = await admin
     .from('org_domains')
     .select(
       `
@@ -44,17 +50,14 @@ export async function resolveHost({ req, url }: Ctx): Promise<Response> {
       organizations:org_id (
         id, slug, display_name, default_locale, default_timezone,
         default_currency_code, status
-      ),
-      org_branding:org_id (
-        primary_color, accent_color
       )
       `,
     )
     .eq('hostname', cleanHost)
     .maybeSingle();
 
-  if (error) {
-    return err('INTERNAL_ERROR', 'host lookup failed', { detail: error.message }, 500, { req });
+  if (domainErr) {
+    return err('INTERNAL_ERROR', 'host lookup failed', { detail: domainErr.message }, 500, { req });
   }
 
   type DomainRow = {
@@ -70,16 +73,26 @@ export async function resolveHost({ req, url }: Ctx): Promise<Response> {
           status: string;
         }
       | null;
-    org_branding: { primary_color: string; accent_color: string } | null;
   };
-  const row = data as unknown as DomainRow | null;
+  const row = domainRow as unknown as DomainRow | null;
 
   if (!row?.organizations || row.organizations.status !== 'active') {
     return err('NOT_FOUND', 'no organization for that host', undefined, 404, { req });
   }
 
   const o = row.organizations;
-  const b = row.org_branding ?? { primary_color: '#0F172A', accent_color: '#3B82F6' };
+
+  const { data: brandRow, error: brandErr } = await admin
+    .from('org_branding')
+    .select('primary_color, accent_color')
+    .eq('org_id', row.org_id)
+    .maybeSingle();
+
+  if (brandErr) {
+    return err('INTERNAL_ERROR', 'brand lookup failed', { detail: brandErr.message }, 500, { req });
+  }
+
+  const b = brandRow ?? { primary_color: '#0F172A', accent_color: '#3B82F6' };
 
   const payload = HostResolveSchema.parse({
     org_id: o.id,
