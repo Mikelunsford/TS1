@@ -24,6 +24,14 @@ const ItemDetailPage = lazy(() => import('./pages/items/ItemDetailPage'));
 const ItemCategoriesPage = lazy(() => import('./pages/items/ItemCategoriesPage'));
 // end items lazy.
 
+// Settings (Wave 3) — FE-B owns this block.
+const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
+const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
+const TaxesPage = lazy(() => import('./pages/settings/TaxesPage'));
+const PaymentMethodsPage = lazy(() => import('./pages/settings/PaymentMethodsPage'));
+const ExchangeRatesPage = lazy(() => import('./pages/settings/ExchangeRatesPage'));
+// end settings lazy.
+
 function PageFallback() {
   return (
     <div className="flex h-screen items-center justify-center text-fg-muted">Loading…</div>
@@ -126,6 +134,48 @@ export function AppRoutes() {
           }
         />
         {/* end items routes. */}
+        {/* Settings (Wave 3) — FE-B owns this block. */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsIndexRedirect />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/currencies"
+          element={
+            <ProtectedRoute>
+              <CurrenciesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/taxes"
+          element={
+            <ProtectedRoute>
+              <TaxesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/payment-methods"
+          element={
+            <ProtectedRoute>
+              <PaymentMethodsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/exchange-rates"
+          element={
+            <ProtectedRoute>
+              <ExchangeRatesPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end settings routes. */}
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>
