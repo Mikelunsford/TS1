@@ -38,16 +38,6 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 const REQUIRED_ENV_PRESENT = Boolean(SUPABASE_URL && SERVICE_ROLE && ANON_KEY);
 
-// Debug: confirm env inside the spec process.
-// eslint-disable-next-line no-console
-console.log(
-  `[rls-probe] SUPABASE_URL_len=${SUPABASE_URL?.length ?? 0} ` +
-    `prefix=${SUPABASE_URL?.slice(0, 8) ?? ''} ` +
-    `ANON_len=${ANON_KEY?.length ?? 0} ` +
-    `SR_len=${SERVICE_ROLE?.length ?? 0} ` +
-    `REQUIRED=${REQUIRED_ENV_PRESENT}`,
-);
-
 /** Functions-base URL ('/functions/v1') for direct edge-function calls. */
 function functionsBase(): string {
   return `${SUPABASE_URL!.replace(/\/$/, '')}/functions/v1`;
@@ -180,10 +170,7 @@ test.describe('Cross-tenant RLS probe', () => {
   });
 
   test('user B cannot read user A customer via PostgREST', async ({ request }) => {
-    const probeUrl = `${SUPABASE_URL!}/rest/v1/customers?id=eq.${customerA}`;
-    // eslint-disable-next-line no-console
-    console.log(`[rls-probe] probeUrl=${JSON.stringify(probeUrl)} customerA=${JSON.stringify(customerA)}`);
-    const res = await request.get(probeUrl, {
+    const res = await request.get(`${SUPABASE_URL!}/rest/v1/customers?id=eq.${customerA}`, {
       headers: {
         apikey: ANON_KEY!,
         authorization: `Bearer ${orgB.access_token}`,

@@ -8,7 +8,11 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',
+    // Use `||` (not `??`) so an EMPTY-STRING value falls back to localhost.
+    // The nightly-rls-probe workflow sets PLAYWRIGHT_BASE_URL from a secret
+    // that may be empty; with `??`, an empty baseURL slips through and
+    // Node's URL constructor throws "Invalid URL" even for absolute URLs.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

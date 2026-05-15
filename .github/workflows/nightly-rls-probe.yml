@@ -35,23 +35,8 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter web exec playwright install --with-deps chromium
 
-      - name: Probe env sanity
-        run: |
-          echo "url_len=${#VITE_SUPABASE_URL}"
-          echo "anon_len=${#VITE_SUPABASE_ANON_KEY}"
-          echo "sr_len=${#SUPABASE_SERVICE_ROLE_KEY}"
-          echo "url_prefix=${VITE_SUPABASE_URL:0:8}"
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-
       - name: Run RLS probe
-        run: |
-          echo "RLS step: url_len=${#VITE_SUPABASE_URL} anon_len=${#VITE_SUPABASE_ANON_KEY} sr_len=${#SUPABASE_SERVICE_ROLE_KEY}"
-          # Sanity-print the URL char codes to catch hidden chars in the secret.
-          node -e 'const u=process.env.VITE_SUPABASE_URL || ""; const codes=[...u].map(c=>c.charCodeAt(0)).join(","); console.log("URL_LEN:" + u.length + " HAS_NL:" + (codes.includes(",10,") || codes.endsWith(",10")) + " HAS_CR:" + codes.includes(",13") + " HAS_SP:" + codes.includes(",32") + " FIRST6:" + codes.split(",").slice(0,6).join("-") + " LAST6:" + codes.split(",").slice(-6).join("-"));'
-          pnpm --filter web exec playwright test playwright/rls-probe.spec.ts
+        run: pnpm test:rls
         env:
           PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
           VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
