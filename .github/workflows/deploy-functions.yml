@@ -1,5 +1,14 @@
 name: Deploy Edge Functions
 
+# Triggers (R-W2-01 structural fix — Wave 3 PR for F-Wave3-01):
+#   1. push to main on functions/config — fires immediately for changes that
+#      don't touch migrations.
+#   2. workflow_run after migrate.yml completes successfully on main — fires
+#      AFTER schema is up to date so coordinated migration+helper PRs deploy
+#      the function code only once the matching DDL is live. For commits that
+#      touch only migrations (no function delta), this still fires but the
+#      `supabase functions deploy` step is a no-op redeploy at the same SHA.
+#   3. workflow_dispatch — manual redeploys.
 on:
   push:
     branches: [main]
@@ -7,6 +16,10 @@ on:
       - 'supabase/functions/**'
       - 'supabase/config.toml'
       - '.github/workflows/deploy-functions.yml'
+  workflow_run:
+    workflows: ['Apply migrations']
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -15,10 +28,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-functions
     timeout-minutes: 15
+    # When triggered via workflow_run, only fire on the migrate.yml success
+    # conclusion. Push + workflow_dispatch always run.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # On workflow_run, default checkout is the workflow's default branch
+          # SHA. Pin to the head_sha that migrate.yml just ran against so the
+          # functions we deploy match the migrations that were just applied.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: supabase/setup-cli@v1
         with:
