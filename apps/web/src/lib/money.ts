@@ -67,3 +67,57 @@ const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK']);
 function getFractionDigits(currency: string): number {
   return ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? 0 : 2;
 }
+
+/**
+ * One taxable line on a quote / invoice / credit note.
+ *
+ * - `tax_rate` is a decimal fraction in [0, 1] (e.g. 0.0875 for 8.75 %).
+ *   This is the shape `taxes.rate numeric(7,6)` snapshots into
+ *   `quote_line_items.tax_rate_snapshot` at issue time (TS1/09-api §7.1
+ *   post-Wave-4-4.0a, schema master §6.5 + §10.3).
+ * - `discount_cents` is applied before tax (matches the trigger math the
+ *   Phase 7 invoice triggers will install in `0033_sales.sql`).
+ */
+export interface TaxableLine {
+  qty: number;
+  unit_price_cents: Cents;
+  /** Decimal in [0, 1]. Defaults to 0. */
+  tax_rate?: number;
+  /** Per-line discount applied before tax. Defaults to 0. */
+  discount_cents?: Cents;
+}
+
+export interface TaxedTotalsCents {
+  subtotal_cents: Cents;
+  tax_cents: Cents;
+  total_cents: Cents;
+}
+
+/**
+ * Cross-line tax-total computation.
+ *
+ * Rule (TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md §1.1, R-W3-07-pending):
+ *   1. For each line, `line_total = qty * unit_price_cents - discount_cents`.
+ *   2. For each line, `line_tax = Math.round(line_total * tax_rate)` — half-up
+ *      via JS `Math.round`. The constitution names half-even (banker's) as the
+ *      target; the deliberate deviation is documented at R-W3-07 and is the
+ *      shape every wire & ledger row uses today. Any flip to half-even must
+ *      land together with a fixture rewrite in `money-parity.test.ts`.
+ *   3. Sum `line_total` into `subtotal_cents`, sum `line_tax` into `tax_cents`.
+ *      No compound rounding at the document level.
+ *
+ * Phase 4 quote totals and Phase 7 invoice totals both call this helper so the
+ * SPA preview matches what the BE trigger math will produce at issue time.
+ */
+export function taxTotalCents(lines: TaxableLine[]): TaxedTotalsCents {
+  let subtotal = 0;
+  let tax = 0;
+  for (const line of lines) {
+    const line_total = line.qty * line.unit_price_cents - (line.discount_cents ?? 0);
+    const rate = line.tax_rate ?? 0;
+    const line_tax = Math.round(line_total * rate);
+    subtotal += line_total;
+    tax += line_tax;
+  }
+  return { subtotal_cents: subtotal, tax_cents: tax, total_cents: subtotal + tax };
+}
