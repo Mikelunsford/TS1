@@ -28,12 +28,10 @@ jobs:
       # GitHub Actions runners are IPv4-only; the direct DB hostname
       # `db.<ref>.supabase.co` resolves to IPv6 in most regions. Route
       # through the IPv4 pooler (session mode on :5432) for migrations.
+      # `supabase link` probes the IPv6 host itself and aborts the job
+      # before --db-url-based steps can run, so we skip linking — passing
+      # --db-url on every step is sufficient.
       # https://supabase.com/docs/guides/troubleshooting/network-restrictions
-      - name: Link to project
-        run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: List pending migrations
         run: |
