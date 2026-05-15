@@ -49,6 +49,8 @@ jobs:
       - name: Run RLS probe
         run: |
           echo "RLS step: url_len=${#VITE_SUPABASE_URL} anon_len=${#VITE_SUPABASE_ANON_KEY} sr_len=${#SUPABASE_SERVICE_ROLE_KEY}"
+          # Sanity-print the URL char codes to catch hidden chars in the secret.
+          node -e 'const u=process.env.VITE_SUPABASE_URL; console.log("[codes]", u && [...u].slice(0,8).map(c=>c.charCodeAt(0)), "len:", u && u.length);'
           pnpm --filter web exec playwright test playwright/rls-probe.spec.ts
         env:
           PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
