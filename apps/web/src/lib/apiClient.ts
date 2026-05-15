@@ -44,7 +44,7 @@ const DataEnvelope = z.object({
 });
 
 interface RequestOptions<TResponse extends ZodTypeAny> {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
   body?: unknown;
   /** Schema for the value inside `{ data: ... }`. */
