@@ -2,15 +2,16 @@
 
 Unified whitelabel platform — Vite + React + TypeScript SPA on Supabase Postgres + Edge Functions, hosted on Vercel.
 
-**Status as of 2026-05-15: Wave 2 (CRM Core) complete.** Production runs at https://ts-1-lime.vercel.app against Supabase project `ozvanymuzaqbexchuoxz`.
+**Status as of 2026-05-15: Wave 3 (Phase 3 — Items / Taxes / Currencies / FX) complete.** Production runs at https://ts-1-lime.vercel.app against Supabase project `ozvanymuzaqbexchuoxz`.
 
 | Wave | Surface live |
 |---|---|
 | 0 — Foundations | Monorepo skeleton, 44 base migrations, 13 Edge Function bundles, CI workflows, SPA shell |
 | 1 — Identity & Tenancy | `tenants-api` + `auth-api` real handlers, BrandingProvider, workspace switcher, DB-backed idempotency, two-org RLS probe, nightly cron |
 | 2 — CRM Core | `crm-api` (22 endpoints: customers/contacts/leads/opportunities/activities), `/crm/*` SPA surface with drag-kanban + lead-convert, audit triggers (migration 0047), bundle-size CI gate (80 kB gzip on `index-*.js`) |
+| 3 — Sales chassis (Items / Taxes / Currencies / FX) | `finance-api` (14 endpoints: currencies / exchange-rates / taxes / payment-methods) + `inventory-api` (13 endpoints: items / item-categories / units). `/items/*` SPA surface (list / detail / categories) with new `MoneyInput` primitive. `/settings/*` SPA surface (currencies / taxes / payment-methods / exchange-rates) with `RateInputPercent` helper. Migration `0048` (idempotency legacy NOT NULL relax, closes R-W1-05) + `0049` (`pricing_menu`→`items` rename + view + per-org catalog seeds). `workflow_run` gate on `deploy-functions.yml` (closes R-W2-01 structural fix). RLS probe matrix 8 → 14 entries. |
 
-Cloud state: 47 migrations applied to prod; 13 edge functions ACTIVE at v11; SPA `index` chunk ~31 kB gzip (well under R-W1-06 budget). Next wave: **Quote to Cash** per `TS1/11-modules/03-BUILD-ORDER.md` Phase 3+.
+Cloud state: 49 migrations applied to prod; 13 edge functions ACTIVE (versions 18-21); SPA `index` chunk ~33 kB gzip (well under R-W1-06 80 kB budget). Next wave: **Wave 4 — Quote-to-Cash continuation** (Phase 4 quoting harden → Phase 5 projects → Phase 7 invoicing → Phase 8 payments) per `TS1/11-modules/03-BUILD-ORDER.md`.
 
 For the full canon (architecture, schema, API contract, build order, agents), see the parent `TS1/` directory. For the running snapshot, see `TS1/STATUS.md`. For Wave hand-off context, see the closeout journals at `TS1/03-workspace/journal/<date>-wave-<N>-closeout.md`.
 
@@ -89,10 +90,10 @@ Authoritative source: `TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md` §0.
 - Supabase Postgres + Edge Functions (Deno)
 - pnpm 9 on Node 20
 
-Banned dependencies are enforced by ESLint `no-restricted-imports` in `apps/web/.eslintrc.cjs`. Wave-2-added keep-list expansions (R-02): `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities` (drag kanbans on `/crm/leads` and `/crm/opportunities`), `size-limit` + `@size-limit/preset-app` (R-W1-06 bundle budget).
+Banned dependencies are enforced by ESLint `no-restricted-imports` in `apps/web/.eslintrc.cjs`. Wave-2-added keep-list expansions (R-02): `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities` (drag kanbans on `/crm/leads` and `/crm/opportunities`), `size-limit` + `@size-limit/preset-app` (R-W1-06 bundle budget). Wave 3 added zero new packages.
 
-> **Constitution-vs-architecture drift open:** `TS1/03-workspace/00-SHARED-CONTEXT.md` keep-lists TanStack Router, Radix, and react-hook-form, but architecture §0 explicitly rejects them. Architecture is the de-facto authority; ESLint enforces architecture. A constitution R-01 patch to reconcile is queued as F-Wave3-04.
+> **Constitution-vs-architecture reconciled** (Wave 3, 2026-05-15): the R-01 patch to `TS1/03-workspace/00-SHARED-CONTEXT.md` closed R-W2-06 + R-W2-07. Authority order is now explicit: **architecture §0 > SHARED-CONTEXT keep-list > sub-agent preference**. SHARED-CONTEXT was updated to reflect react-router-dom v6, hand-rolled primitives, and `useState` + Zod `safeParse` for forms.
 
-## Wave 2 → Wave 3
+## Wave 3 → Wave 4
 
-Wave 2 (CRM Core) is complete; ready for Wave 3 (Quote to Cash) dispatch. Recommended pre-dispatch follow-ups: F-Wave3-04 (constitution reconcile) then F-Wave3-01 (R-W1-05 close — drop legacy idempotency columns via 3-stage coordinated PR). See `TS1/03-workspace/journal/2026-05-15-wave-2-closeout.md` for the canonical hand-off.
+Wave 3 (Phase 3 — Items / Taxes / Currencies / FX) is complete; ready for Wave 4 (Phase 4 quoting harden → Phase 5 projects → Phase 7 invoicing → Phase 8 payments) dispatch. Recommended pre-dispatch follow-ups: **F-Wave4-02** (R-W3-03 tax `rate` shape reconciliation — must land before Phase 4 quote totals consume the rate) then **F-Wave4-03 + F-Wave4-08** (helper consolidation + real capability matrix). See `TS1/03-workspace/journal/2026-05-15-wave-3-closeout.md` for the canonical hand-off.
