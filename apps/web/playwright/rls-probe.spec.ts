@@ -180,7 +180,10 @@ test.describe('Cross-tenant RLS probe', () => {
   });
 
   test('user B cannot read user A customer via PostgREST', async ({ request }) => {
-    const res = await request.get(`${SUPABASE_URL!}/rest/v1/customers?id=eq.${customerA}`, {
+    const probeUrl = `${SUPABASE_URL!}/rest/v1/customers?id=eq.${customerA}`;
+    // eslint-disable-next-line no-console
+    console.log(`[rls-probe] probeUrl=${JSON.stringify(probeUrl)} customerA=${JSON.stringify(customerA)}`);
+    const res = await request.get(probeUrl, {
       headers: {
         apikey: ANON_KEY!,
         authorization: `Bearer ${orgB.access_token}`,
