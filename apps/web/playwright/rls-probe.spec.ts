@@ -93,6 +93,26 @@ async function makeFixture(label: string): Promise<OrgFixture> {
   });
   if (memErr) throw new Error(`membership create failed: ${memErr.message}`);
 
+  // 3b) Pre-insert user_preferences with org_id BEFORE profile insert so
+  // the after-insert trigger on profiles (which does an
+  // INSERT...ON CONFLICT DO NOTHING into user_preferences but doesn't set
+  // org_id — a Wave 0 schema bug since user_preferences.org_id is NOT NULL)
+  // hits the conflict path. Tracked as a forward-only migration TODO.
+  const { error: prefErr } = await admin.from('user_preferences').insert({
+    user_id,
+    org_id,
+  });
+  if (prefErr) throw new Error(`user_preferences seed failed: ${prefErr.message}`);
+
+  // 3c) Insert public.profiles row. On prod, app code populates it on
+  // first sign-in; staging has no SPA touching it, so the fixture must.
+  const { error: profileErr } = await admin.from('profiles').insert({
+    user_id,
+    email,
+    display_name: `RLS Probe ${label}`,
+  });
+  if (profileErr) throw new Error(`profile create failed: ${profileErr.message}`);
+
   // 4) Sign in to get a JWT.
   const userClient = createClient(SUPABASE_URL!, ANON_KEY!);
   const { data: session, error: signInErr } = await userClient.auth.signInWithPassword({
