@@ -25,6 +25,10 @@ jobs:
         with:
           version: 1.180.0
 
+      # GitHub Actions runners are IPv4-only; the direct DB hostname
+      # `db.<ref>.supabase.co` resolves to IPv6 in most regions. Route
+      # through the IPv4 pooler (session mode on :5432) for migrations.
+      # https://supabase.com/docs/guides/troubleshooting/network-restrictions
       - name: Link to project
         run: supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
         env:
@@ -32,19 +36,22 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: List pending migrations
-        run: supabase migration list --linked
+        run: |
+          supabase migration list \
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-0-us-west-1.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Apply migrations (forward-only)
-        run: supabase db push --linked
+        run: |
+          supabase db push \
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-0-us-west-1.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Verify final migration count
-        run: supabase migration list --linked
+        run: |
+          supabase migration list \
+            --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_REF }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-0-us-west-1.pooler.supabase.com:5432/postgres"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
