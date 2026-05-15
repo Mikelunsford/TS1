@@ -47,7 +47,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Run RLS probe
-        run: pnpm test:rls
+        run: |
+          echo "RLS step: url_len=${#VITE_SUPABASE_URL} anon_len=${#VITE_SUPABASE_ANON_KEY} sr_len=${#SUPABASE_SERVICE_ROLE_KEY}"
+          pnpm --filter web exec playwright test playwright/rls-probe.spec.ts
         env:
           PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
           VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
