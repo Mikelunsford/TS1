@@ -139,9 +139,94 @@ async function seedCustomer(fx: OrgFixture): Promise<string> {
   return data.id as string;
 }
 
+/**
+ * Per-fixture uniquifier used to disambiguate row numbers / names within a
+ * single Playwright run. The org_id slice is unique per fixture; the
+ * timestamp+random suffix keeps it unique even if the same fixture seeds
+ * multiple rows in the same table.
+ */
+function uniquifier(fx: OrgFixture, label: string): string {
+  return `${label}-${fx.org_id.slice(0, 8)}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+}
+
+/** Seed a lead row owned by `fx.org_id`. Returns the lead id. */
+async function seedLead(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'lead');
+  const { data, error } = await admin
+    .from('leads')
+    .insert({
+      org_id: fx.org_id,
+      lead_number: `L-${suffix}`,
+      display_name: `Lead-${suffix}`,
+      status: 'new',
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`lead seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/**
+ * Seed an opportunity (requires a customer first since opportunities.customer_id
+ * is NOT NULL). Returns `{ customer_id, opportunity_id }`.
+ */
+async function seedOpportunity(
+  fx: OrgFixture,
+): Promise<{ customer_id: string; opportunity_id: string }> {
+  const admin = adminClient();
+  const customer_id = await seedCustomer(fx);
+  const suffix = uniquifier(fx, 'opp');
+  const { data, error } = await admin
+    .from('opportunities')
+    .insert({
+      org_id: fx.org_id,
+      customer_id,
+      opportunity_number: `O-${suffix}`,
+      name: `Opportunity-${suffix}`,
+      stage: 'prospect',
+      amount_cents: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`opportunity seed failed: ${error?.message}`);
+  return { customer_id, opportunity_id: data.id as string };
+}
+
+/**
+ * Seed a contact (requires a customer first since contacts.customer_id is
+ * NOT NULL). Returns `{ customer_id, contact_id }`.
+ */
+async function seedContact(
+  fx: OrgFixture,
+): Promise<{ customer_id: string; contact_id: string }> {
+  const admin = adminClient();
+  const customer_id = await seedCustomer(fx);
+  const suffix = uniquifier(fx, 'ct');
+  const { data, error } = await admin
+    .from('contacts')
+    .insert({
+      org_id: fx.org_id,
+      customer_id,
+      first_name: `Contact`,
+      last_name: suffix,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`contact seed failed: ${error?.message}`);
+  return { customer_id, contact_id: data.id as string };
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
+  // Order: leaf children first, then customers, then membership/org rows.
+  // The opportunity table references customers (ON DELETE RESTRICT), so
+  // delete opportunities and leads before customers.
+  await admin.from('opportunities').delete().eq('org_id', fx.org_id);
+  await admin.from('leads').delete().eq('org_id', fx.org_id);
+  await admin.from('contacts').delete().eq('org_id', fx.org_id);
+  await admin.from('activities').delete().eq('org_id', fx.org_id);
   await admin.from('customers').delete().eq('org_id', fx.org_id);
   await admin.auth.admin.deleteUser(fx.user_id);
   await admin.from('org_branding').delete().eq('org_id', fx.org_id);
@@ -196,6 +281,119 @@ test.describe('Cross-tenant RLS probe', () => {
     const body = (await res.json()) as Array<{ id: string }>;
     expect(body.length, 'org A must see its own customer').toBe(1);
     expect(body[0]!.id).toBe(customerA);
+  });
+
+  test('user B cannot read user A lead via PostgREST', async ({ request }) => {
+    const leadA = await seedLead(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/leads?id=eq.${leadA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A leads').toHaveLength(0);
+
+      // Positive control: A reads its own lead.
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/leads?id=eq.${leadA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own lead').toBe(1);
+      expect(ownBody[0]!.id).toBe(leadA);
+    } finally {
+      await adminClient().from('leads').delete().eq('id', leadA);
+    }
+  });
+
+  test('user B cannot read user A opportunity via PostgREST', async ({ request }) => {
+    const { customer_id, opportunity_id } = await seedOpportunity(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/opportunities?id=eq.${opportunity_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A opportunities').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/opportunities?id=eq.${opportunity_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own opportunity').toBe(1);
+      expect(ownBody[0]!.id).toBe(opportunity_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('opportunities').delete().eq('id', opportunity_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('user B cannot read user A contact via PostgREST', async ({ request }) => {
+    const { customer_id, contact_id } = await seedContact(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/contacts?id=eq.${contact_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A contacts').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/contacts?id=eq.${contact_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own contact').toBe(1);
+      expect(ownBody[0]!.id).toBe(contact_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('contacts').delete().eq('id', contact_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
   });
 
   test('auth-api/me returns user B own profile and membership only', async ({ request }) => {
