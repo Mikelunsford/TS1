@@ -80,6 +80,16 @@ const QUOTE_VERSION_COLS =
   'currency_code, exchange_rate, tax_id, tax_rate_snapshot, ' +
   'subtotal_cents, tax_cents, discount_cents, total_cents, notes, valid_until, created_at';
 
+// Mirrored from projects-api/handlers/projects.ts to keep the convert-to-project
+// response shape stable without a cross-bundle import (Edge Function bundles do
+// not share a Deno module graph at deploy time).
+const PROJECT_COLS_FOR_CONVERT =
+  'id, org_id, project_number, quote_id, customer_id, customer_name, name, status, ' +
+  'currency_code, total_cents, budget_cents, due_date, invoice_id, ' +
+  'bom_finalized_at, bom_finalized_by, ready_to_build_at, sent_to_production_at, ' +
+  'production_started_at, production_completed_at, ready_to_ship_at, ' +
+  'shipping_completed_at, created_at, updated_at';
+
 interface QuoteRow {
   id: string;
   org_id: string;
@@ -581,7 +591,7 @@ export async function convertQuoteToProject({ req, params }: Ctx): Promise<Respo
         }
         const { data: project, error: projErr } = await admin()
           .from('projects')
-          .select('*')
+          .select(PROJECT_COLS_FOR_CONVERT)
           .eq('id', projectId)
           .eq('org_id', caller.orgId)
           .maybeSingle();
