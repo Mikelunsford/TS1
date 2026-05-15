@@ -57,7 +57,7 @@ const items: NavItem[] = [
     ],
   },
   { to: '/quotes', label: 'Quotes', icon: FileText, requireCap: 'quotes.read' },
-  { to: '/projects', label: 'Projects', icon: ClipboardList, disabled: true, wave: 3 },
+  { to: '/projects', label: 'Projects', icon: ClipboardList, requireCap: 'projects.read' },
   { to: '/invoices', label: 'Invoices', icon: Receipt, disabled: true, wave: 3 },
   {
     to: '/items',
