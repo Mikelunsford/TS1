@@ -1,5 +1,7 @@
 # Wave 0 Handoff — what you run on your machine
 
+> **HISTORICAL — Wave 0 closed 2026-05-14. Wave 1 closed 2026-05-15. Wave 2 closed 2026-05-15.** This document is preserved as the bootstrap procedure for any future fresh-machine setup (e.g., a new contributor's first day). The Wave-0 smoke matrix at the bottom remains the recurring CI floor. See the per-wave closeout journals at `TS1/03-workspace/journal/<date>-wave-<N>-closeout.md` for the canonical hand-off context.
+
 The orchestrator authored every file Wave 0 needs (directory tree, configs, SPA shell, migrations 0001–0044, 13 Edge Function bundles, CI workflows, env templates, docs). What's left needs your machine, your Docker, your Vercel account, and your credentials. This doc walks you through it.
 
 Estimated time: **45–90 min** depending on download speeds and how much of Vercel you've set up before.
