@@ -27,13 +27,15 @@ import { toast } from 'sonner';
 import { OpportunityStageBadge } from '@/components/crm/OpportunityStageBadge';
 import { cn } from '@/lib/cn';
 import {
-  OPPORTUNITY_STAGE_VALUES,
+  OpportunityStageSchema,
   type Opportunity,
   type OpportunityStage,
-} from '@/lib/crmTypes';
+} from '@/lib/types';
 import { formatMoney } from '@/lib/money';
 import { opportunityKeys } from '@/lib/queryKeys/opportunities';
 import { updateOpportunityStage } from '@/lib/services/opportunitiesService';
+
+const OPPORTUNITY_STAGE_VALUES = OpportunityStageSchema.options;
 
 type Props = {
   opportunities: Opportunity[];
@@ -58,7 +60,7 @@ const STAGE_LABELS: Record<OpportunityStage, string> = {
 function weightedTotalCents(opps: Opportunity[]): number {
   let total = 0;
   for (const opp of opps) {
-    const cents = typeof opp.amount_cents === 'string' ? Number(opp.amount_cents) : opp.amount_cents;
+    const cents = opp.amount_cents;
     if (Number.isFinite(cents)) {
       total += (cents * opp.probability_pct) / 100;
     }
@@ -92,7 +94,7 @@ export function OpportunityKanban({ opportunities }: Props) {
 
   const mutation = useMutation({
     mutationFn: (args: { id: string; stage: OpportunityStage }) =>
-      updateOpportunityStage({ id: args.id, stage: args.stage }),
+      updateOpportunityStage(args.id, { stage: args.stage }),
     onMutate: async (args) => {
       await queryClient.cancelQueries({ queryKey: opportunityKeys.all });
       const previous = queryClient.getQueriesData<Opportunity[]>({
@@ -226,7 +228,7 @@ function OpportunityCard({ opp, dragging }: { opp: Opportunity; dragging?: boole
         <OpportunityStageBadge stage={opp.stage} />
       </div>
       <div className="flex items-center justify-between text-xs text-fg-muted">
-        <span>{formatMoney(opp.amount_cents, { currency: opp.currency_code })}</span>
+        <span>{formatMoney(opp.amount_cents, { currency: opp.currency_code ?? 'USD' })}</span>
         <span>{opp.probability_pct}%</span>
       </div>
       <span className="text-xs text-fg-subtle">{opp.opportunity_number}</span>

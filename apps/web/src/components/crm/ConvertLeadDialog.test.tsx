@@ -11,20 +11,23 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ConvertLeadDialog } from './ConvertLeadDialog';
-import type { Lead } from '@/lib/crmTypes';
+import type { Lead } from '@/lib/types';
 
 const convertLeadMock = vi.fn(
-  async (args: {
-    id: string;
-    opportunity_name: string;
-    amount_cents: number;
-    currency_code: string;
-    create_customer: boolean;
-  }) => ({
-    lead_id: args.id,
+  async (
+    id: string,
+    body: {
+      opportunity_name: string;
+      opportunity_amount_cents: number;
+      opportunity_currency_code: string;
+      create_customer: boolean;
+    },
+  ) => ({
+    lead: { id } as Lead,
     opportunity_id: '00000000-0000-0000-0000-000000000099',
-    opportunity_number: 'OPP-2026-00042',
-    customer_id: args.create_customer ? '00000000-0000-0000-0000-000000000077' : null,
+    customer_id: body.create_customer
+      ? '00000000-0000-0000-0000-000000000077'
+      : '00000000-0000-0000-0000-000000000000',
   }),
 );
 
@@ -42,16 +45,21 @@ function leadFixture(): Lead {
   return {
     id: '11111111-1111-1111-1111-111111111111',
     org_id: '00000000-0000-0000-0000-000000000001',
+    lead_number: 'LEAD-2026-00001',
     display_name: 'Acme Logistics',
+    company_name: null,
     status: 'qualified',
     source: 'inbound',
     primary_email: 'ap@acme.com',
     primary_phone: null,
-    assigned_to: null,
-    notes: null,
-    converted_opportunity_id: null,
+    owner_user_id: null,
+    estimated_value_cents: 0,
+    currency_code: 'USD',
+    expected_close_date: null,
     converted_customer_id: null,
+    converted_opportunity_id: null,
     converted_at: null,
+    notes: null,
     created_at: '2026-05-15T00:00:00.000Z',
     updated_at: '2026-05-15T00:00:00.000Z',
   };
@@ -92,11 +100,10 @@ describe('ConvertLeadDialog', () => {
     fireEvent.click(screen.getByTestId('convert-submit'));
 
     await waitFor(() => {
-      expect(convertLeadMock).toHaveBeenCalledWith({
-        id: '11111111-1111-1111-1111-111111111111',
+      expect(convertLeadMock).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', {
         opportunity_name: 'Acme Logistics',
-        amount_cents: 123456,
-        currency_code: 'EUR',
+        opportunity_amount_cents: 123456,
+        opportunity_currency_code: 'EUR',
         create_customer: true,
       });
     });

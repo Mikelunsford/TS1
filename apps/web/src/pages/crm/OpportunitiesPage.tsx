@@ -13,16 +13,16 @@ import { useSearchParams } from 'react-router-dom';
 import { OpportunityKanban } from '@/components/crm/OpportunityKanban';
 import { OpportunityStageBadge } from '@/components/crm/OpportunityStageBadge';
 import { cn } from '@/lib/cn';
-import {
-  OPPORTUNITY_STAGE_VALUES,
-  type Opportunity,
-  type OpportunityListFilters,
-  type OpportunityStage,
-} from '@/lib/crmTypes';
+import { OpportunityStageSchema, type Opportunity } from '@/lib/types';
 import { formatDate } from '@/lib/formatDate';
 import { formatMoney } from '@/lib/money';
 import { opportunityKeys } from '@/lib/queryKeys/opportunities';
-import { listOpportunities } from '@/lib/services/opportunitiesService';
+import {
+  listOpportunities,
+  type OpportunityListFilters,
+} from '@/lib/services/opportunitiesService';
+
+const OPPORTUNITY_STAGE_VALUES = OpportunityStageSchema.options;
 
 type View = 'list' | 'kanban';
 
@@ -31,21 +31,22 @@ export default function OpportunitiesPage() {
   const view: View = params.get('view') === 'kanban' ? 'kanban' : 'list';
 
   const stageParam = params.get('stage');
-  const assignedToParam = params.get('assigned_to');
+  const ownerParam = params.get('owner');
 
   const filters = useMemo<OpportunityListFilters>(() => {
     const f: OpportunityListFilters = {};
     if (stageParam && (OPPORTUNITY_STAGE_VALUES as readonly string[]).includes(stageParam)) {
-      f.stage = stageParam as OpportunityStage;
+      f.stage = stageParam;
     }
-    if (assignedToParam) f.assigned_to = assignedToParam;
+    if (ownerParam) f.owner = ownerParam;
     return f;
-  }, [stageParam, assignedToParam]);
+  }, [stageParam, ownerParam]);
 
-  const { data: opportunities = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: opportunityKeys.list(filters),
     queryFn: () => listOpportunities(filters),
   });
+  const opportunities: Opportunity[] = data?.items ?? [];
 
   const setView = (next: View) => {
     const sp = new URLSearchParams(params);
@@ -53,7 +54,7 @@ export default function OpportunitiesPage() {
     setParams(sp, { replace: true });
   };
 
-  const setFilter = (key: 'stage' | 'assigned_to', value: string | null) => {
+  const setFilter = (key: 'stage' | 'owner', value: string | null) => {
     const sp = new URLSearchParams(params);
     if (value === null || value === '') {
       sp.delete(key);
@@ -113,8 +114,8 @@ export default function OpportunitiesPage() {
           type="text"
           aria-label="Filter by assigned user id"
           placeholder="Assigned to (user id)"
-          value={assignedToParam ?? ''}
-          onChange={(e) => setFilter('assigned_to', e.target.value || null)}
+          value={ownerParam ?? ''}
+          onChange={(e) => setFilter('owner', e.target.value || null)}
           className="px-2 py-1 rounded border border-border bg-bg text-sm text-fg w-72"
         />
       </div>
@@ -161,7 +162,7 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
                 <OpportunityStageBadge stage={opp.stage} />
               </td>
               <td className="px-4 py-2 text-fg">
-                {formatMoney(opp.amount_cents, { currency: opp.currency_code })}
+                {formatMoney(opp.amount_cents, { currency: opp.currency_code ?? 'USD' })}
               </td>
               <td className="px-4 py-2 text-fg-muted">{opp.probability_pct}%</td>
               <td className="px-4 py-2 text-fg-muted">{formatDate(opp.expected_close_date)}</td>

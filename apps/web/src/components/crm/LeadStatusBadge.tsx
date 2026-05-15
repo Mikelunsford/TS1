@@ -3,7 +3,7 @@
  * design system tokens — bg-* / text-* pairs picked from tailwind.config.ts.
  */
 import { cn } from '@/lib/cn';
-import type { LeadStatus } from '@/lib/crmTypes';
+import type { LeadStatus } from '@/lib/types';
 
 type Props = {
   status: LeadStatus;

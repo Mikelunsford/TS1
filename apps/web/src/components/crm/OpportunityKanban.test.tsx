@@ -10,12 +10,12 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { OpportunityKanban } from './OpportunityKanban';
-import type { Opportunity } from '@/lib/crmTypes';
+import type { Opportunity } from '@/lib/types';
 
 vi.mock('@/lib/services/opportunitiesService', () => ({
-  updateOpportunityStage: vi.fn(async (args: { id: string; stage: Opportunity['stage'] }) => ({
-    id: args.id,
-    stage: args.stage,
+  updateOpportunityStage: vi.fn(async (id: string, body: { stage: Opportunity['stage'] }) => ({
+    id,
+    stage: body.stage,
   })),
 }));
 
@@ -32,7 +32,8 @@ function fixture(
   return {
     id,
     org_id: '00000000-0000-0000-0000-000000000001',
-    customer_id: null,
+    opportunity_number: `OPP-2026-${id.padStart(5, '0')}`,
+    customer_id: '00000000-0000-0000-0000-000000000001',
     lead_id: null,
     display_name: `Opp ${id}`,
     stage,
@@ -40,8 +41,10 @@ function fixture(
     currency_code: 'USD',
     probability_pct,
     expected_close_date: null,
-    assigned_to: null,
-    opportunity_number: `OPP-2026-${id.padStart(5, '0')}`,
+    closed_at: null,
+    close_reason: null,
+    owner_user_id: null,
+    notes: null,
     created_at: '2026-05-15T00:00:00.000Z',
     updated_at: '2026-05-15T00:00:00.000Z',
   };

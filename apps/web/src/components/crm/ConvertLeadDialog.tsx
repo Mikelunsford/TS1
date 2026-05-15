@@ -17,16 +17,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
-import {
-  LeadConvertRequestSchema,
-  type Lead,
-  type LeadConvertResponse,
-} from '@/lib/crmTypes';
+import { LeadConvertSchema, type Lead } from '@/lib/types';
 import { toCents } from '@/lib/money';
 import { customerKeys } from '@/lib/queryKeys/customers';
 import { leadKeys } from '@/lib/queryKeys/leads';
 import { opportunityKeys } from '@/lib/queryKeys/opportunities';
 import { convertLead } from '@/lib/services/leadsService';
+
+/** Convert result from Backend's leadsService — see services/leadsService.ts */
+type LeadConvertResult = {
+  lead: Lead;
+  customer_id: string;
+  opportunity_id: string;
+};
 
 type Props = {
   lead: Lead | null;
@@ -34,7 +37,7 @@ type Props = {
   defaultCurrencyCode?: string;
   open: boolean;
   onClose: () => void;
-  onSuccess?: (result: LeadConvertResponse) => void;
+  onSuccess?: (result: LeadConvertResult) => void;
 };
 
 export function ConvertLeadDialog({
@@ -80,18 +83,21 @@ export function ConvertLeadDialog({
     mutationFn: (vars: {
       id: string;
       opportunity_name: string;
-      amount_cents: number;
-      currency_code: string;
+      opportunity_amount_cents: number;
+      opportunity_currency_code: string;
       create_customer: boolean;
-    }) => convertLead(vars),
+    }) => {
+      const { id, ...body } = vars;
+      return convertLead(id, body);
+    },
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: leadKeys.all }),
         queryClient.invalidateQueries({ queryKey: customerKeys.all }),
         queryClient.invalidateQueries({ queryKey: opportunityKeys.all }),
       ]);
-      toast.success(`Lead converted to opportunity ${result.opportunity_number}`);
-      onSuccess?.(result);
+      toast.success(`Lead converted to opportunity ${result.opportunity_id}`);
+      onSuccess?.(result as LeadConvertResult);
       onClose();
     },
     onError: (err: unknown) => {
@@ -114,10 +120,10 @@ export function ConvertLeadDialog({
       return;
     }
 
-    const parsed = LeadConvertRequestSchema.safeParse({
+    const parsed = LeadConvertSchema.safeParse({
       opportunity_name: opportunityName,
-      amount_cents: amountCents,
-      currency_code: currencyCode,
+      opportunity_amount_cents: amountCents,
+      opportunity_currency_code: currencyCode,
       create_customer: createCustomer,
     });
     if (!parsed.success) {
@@ -128,8 +134,8 @@ export function ConvertLeadDialog({
     mutation.mutate({
       id: lead.id,
       opportunity_name: parsed.data.opportunity_name,
-      amount_cents: amountCents,
-      currency_code: parsed.data.currency_code,
+      opportunity_amount_cents: amountCents,
+      opportunity_currency_code: parsed.data.opportunity_currency_code ?? currencyCode,
       create_customer: parsed.data.create_customer,
     });
   };

@@ -16,12 +16,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { LeadKanban } from './LeadKanban';
 import { leadKeys } from '@/lib/queryKeys/leads';
-import type { Lead } from '@/lib/crmTypes';
+import type { Lead } from '@/lib/types';
 
 vi.mock('@/lib/services/leadsService', () => ({
-  updateLead: vi.fn(async (args: { id: string; status: Lead['status'] }) => ({
-    id: args.id,
-    status: args.status,
+  updateLead: vi.fn(async (id: string, body: { status?: Lead['status'] }) => ({
+    id,
+    status: body.status,
   })),
 }));
 
@@ -33,16 +33,21 @@ function fixture(id: string, status: Lead['status'], name = `Lead ${id}`): Lead 
   return {
     id,
     org_id: '00000000-0000-0000-0000-000000000001',
+    lead_number: `LEAD-2026-${id.padStart(5, '0')}`,
     display_name: name,
+    company_name: null,
     status,
     source: 'inbound',
     primary_email: `${id}@example.com`,
     primary_phone: null,
-    assigned_to: null,
-    notes: null,
-    converted_opportunity_id: null,
+    owner_user_id: null,
+    estimated_value_cents: 0,
+    currency_code: 'USD',
+    expected_close_date: null,
     converted_customer_id: null,
+    converted_opportunity_id: null,
     converted_at: null,
+    notes: null,
     created_at: '2026-05-15T00:00:00.000Z',
     updated_at: '2026-05-15T00:00:00.000Z',
   };
@@ -95,10 +100,10 @@ describe('LeadKanban', () => {
     // a qualified card triggers onConvert, not status change — so for the
     // pure status-change path we exercise updateLead via the leadsService mock.
     await act(async () => {
-      await (updateLead as ReturnType<typeof vi.fn>)({ id: 'a', status: 'contacted' });
+      await (updateLead as ReturnType<typeof vi.fn>)('a', { status: 'contacted' });
     });
 
-    expect(updateLead).toHaveBeenCalledWith({ id: 'a', status: 'contacted' });
+    expect(updateLead).toHaveBeenCalledWith('a', { status: 'contacted' });
   });
 
   it('shows a Convert button on qualified cards and fires onConvert', async () => {

@@ -29,9 +29,11 @@ import { toast } from 'sonner';
 
 import { LeadStatusBadge } from '@/components/crm/LeadStatusBadge';
 import { cn } from '@/lib/cn';
-import { LEAD_STATUS_VALUES, type Lead, type LeadStatus } from '@/lib/crmTypes';
+import { LeadStatusSchema, type Lead, type LeadStatus } from '@/lib/types';
 import { leadKeys } from '@/lib/queryKeys/leads';
 import { updateLead } from '@/lib/services/leadsService';
+
+const LEAD_STATUS_VALUES = LeadStatusSchema.options;
 
 type Props = {
   leads: Lead[];
@@ -72,7 +74,10 @@ export function LeadKanban({ leads, onConvert }: Props) {
 
   const mutation = useMutation({
     mutationFn: (args: { id: string; status: LeadStatus }) =>
-      updateLead({ id: args.id, status: args.status }),
+      // Backend's LeadPatch.status excludes 'converted' (conversion goes
+      // through POST /convert). Cast here — runtime rejects on drag-to-
+      // converted with 400, and our onError rollback handles it.
+      updateLead(args.id, { status: args.status as 'new' | 'contacted' | 'qualified' | 'disqualified' }),
     onMutate: async (args) => {
       // Optimistic update: snapshot the current cache, then write the new
       // status into every matching list cache.

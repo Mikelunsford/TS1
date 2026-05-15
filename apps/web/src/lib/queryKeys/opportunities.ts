@@ -2,7 +2,7 @@
  * Opportunities query keys. Per /03-workspace/01-NAMING-CONVENTIONS.md "Query
  * keys", shape is `[module, entity, ...args]`.
  */
-import type { OpportunityListFilters } from '../crmTypes';
+import type { OpportunityListFilters } from '../services/opportunitiesService';
 
 export const opportunityKeys = {
   all: ['crm', 'opportunities'] as const,

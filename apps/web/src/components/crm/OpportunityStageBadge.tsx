@@ -3,7 +3,7 @@
  * seven values in migration 0032's CHECK constraint.
  */
 import { cn } from '@/lib/cn';
-import type { OpportunityStage } from '@/lib/crmTypes';
+import type { OpportunityStage } from '@/lib/types';
 
 type Props = {
   stage: OpportunityStage;

@@ -17,15 +17,12 @@ import { ConvertLeadDialog } from '@/components/crm/ConvertLeadDialog';
 import { LeadKanban } from '@/components/crm/LeadKanban';
 import { LeadStatusBadge } from '@/components/crm/LeadStatusBadge';
 import { cn } from '@/lib/cn';
-import {
-  LEAD_STATUS_VALUES,
-  type Lead,
-  type LeadListFilters,
-  type LeadStatus,
-} from '@/lib/crmTypes';
+import { LeadStatusSchema, type Lead } from '@/lib/types';
 import { formatDate } from '@/lib/formatDate';
 import { leadKeys } from '@/lib/queryKeys/leads';
-import { listLeads, updateLead } from '@/lib/services/leadsService';
+import { listLeads, updateLead, type LeadListFilters } from '@/lib/services/leadsService';
+
+const LEAD_STATUS_VALUES = LeadStatusSchema.options;
 
 type View = 'list' | 'kanban';
 
@@ -37,26 +34,27 @@ export default function LeadsPage() {
 
   const statusParam = params.get('status');
   const sourceParam = params.get('source');
-  const assignedToParam = params.get('assigned_to');
+  const ownerParam = params.get('owner');
 
   const filters = useMemo<LeadListFilters>(() => {
     const f: LeadListFilters = {};
     if (statusParam && (LEAD_STATUS_VALUES as readonly string[]).includes(statusParam)) {
-      f.status = statusParam as LeadStatus;
+      f.status = statusParam;
     }
     if (sourceParam && (LEAD_SOURCES as readonly string[]).includes(sourceParam)) {
-      f.source = sourceParam as (typeof LEAD_SOURCES)[number];
+      f.source = sourceParam;
     }
-    if (assignedToParam) {
-      f.assigned_to = assignedToParam;
+    if (ownerParam) {
+      f.owner = ownerParam;
     }
     return f;
-  }, [statusParam, sourceParam, assignedToParam]);
+  }, [statusParam, sourceParam, ownerParam]);
 
-  const { data: leads = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: leadKeys.list(filters),
     queryFn: () => listLeads(filters),
   });
+  const leads: Lead[] = data?.items ?? [];
 
   const setView = (next: View) => {
     const sp = new URLSearchParams(params);
@@ -64,7 +62,7 @@ export default function LeadsPage() {
     setParams(sp, { replace: true });
   };
 
-  const setFilter = (key: 'status' | 'source' | 'assigned_to', value: string | null) => {
+  const setFilter = (key: 'status' | 'source' | 'owner', value: string | null) => {
     const sp = new URLSearchParams(params);
     if (value === null || value === '') {
       sp.delete(key);
@@ -139,8 +137,8 @@ export default function LeadsPage() {
           type="text"
           aria-label="Filter by assigned user id"
           placeholder="Assigned to (user id)"
-          value={assignedToParam ?? ''}
-          onChange={(e) => setFilter('assigned_to', e.target.value || null)}
+          value={ownerParam ?? ''}
+          onChange={(e) => setFilter('owner', e.target.value || null)}
           className="px-2 py-1 rounded border border-border bg-bg text-sm text-fg w-72"
         />
       </div>
@@ -178,8 +176,8 @@ function LeadsTable({
 }) {
   const queryClient = useQueryClient();
   const statusMutation = useMutation({
-    mutationFn: (vars: { id: string; status: LeadStatus }) =>
-      updateLead({ id: vars.id, status: vars.status }),
+    mutationFn: (vars: { id: string; status: 'new' | 'contacted' | 'qualified' | 'disqualified' }) =>
+      updateLead(vars.id, { status: vars.status }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: leadKeys.all });
     },
