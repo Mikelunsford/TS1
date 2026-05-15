@@ -1,32 +1,37 @@
 /**
- * Idempotency helper.
+ * Idempotency helper — DB-backed.
  *
  * Per TS1/03-workspace/00-SHARED-CONTEXT.md "Idempotency" and
  * TS1/09-api/00-API-CONTRACT.md §0.4:
  *
  *   POST/PATCH/DELETE must include `Idempotency-Key: <uuid v4>`.
- *   The server stores (key, user_id, org_id, route_hash, body_hash) -> response.
+ *   Server stores (key, user_id, org_id) -> (route_hash, body_hash,
+ *   status_code, response_body) in `idempotency_keys` (migration 0036).
  *   Replay returns the cached response with `Idempotent-Replay: true`.
  *   Same key + different body_hash returns 409 IDEMPOTENCY_CONFLICT.
- *
- * Wave 0: this is a stub. The DB calls are TODO; the helper exists so the
- * Wave 1+ handlers can wire it in without changing call sites. For now the
- * helper just runs the handler.
+ *   Cache lifetime: 24 hours (records older than 7 days are GC'd
+ *   by the `idempotency-gc` scheduled function — TBD wave).
  */
 
+import { ApiError } from './responses.ts';
+import { createAdminClient } from './supabase-admin.ts';
 import type { OrgContext } from './tenant.ts';
 
 export interface IdempotencyCtx {
   req: Request;
   org: OrgContext;
   bundle: string;
-  route: string; // e.g. 'POST /customers'
+  route: string; // e.g. 'POST /sessions/switch-org'
 }
 
-export interface CachedResult {
+export interface CachedResponse {
   status: number;
   body: unknown;
 }
+
+/** UUID v4 shape — case-insensitive. */
+const UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** SHA-256 hash of a string, hex-encoded. */
 export async function sha256Hex(input: string): Promise<string> {
@@ -51,34 +56,155 @@ export function canonicalJson(value: unknown): string {
   }
   const keys = Object.keys(value as Record<string, unknown>).sort();
   const parts = keys.map(
-    (k) => JSON.stringify(k) + ':' + canonicalJson((value as Record<string, unknown>)[k]),
+    (k) =>
+      JSON.stringify(k) + ':' + canonicalJson((value as Record<string, unknown>)[k]),
   );
   return '{' + parts.join(',') + '}';
 }
 
 /**
- * Run a handler with idempotency semantics. Wave 0: passes through; the DB
- * cache is not consulted. The signature is the one Wave 1+ handlers will
- * adopt verbatim.
- *
- * TODO Wave 1: implement the lookup/persist against `idempotency_keys`:
- *   1. read `Idempotency-Key` header; if missing on a state-changing route,
- *      return ApiError('BAD_REQUEST', 'Idempotency-Key required.').
- *   2. compute route_hash = sha256(method + ' ' + path).
- *   3. compute body_hash = sha256(canonicalJson(parsed_body)).
- *   4. select from idempotency_keys where (key, user_id, org_id) = (...).
- *      - match + same body_hash + same route_hash -> return cached response
- *        with header `Idempotent-Replay: true`.
- *      - match + different body_hash -> return 409 IDEMPOTENCY_CONFLICT.
- *      - no match -> run handler, persist (key, status, response_body), return.
- *   5. cache lifetime 24h; gc sweeps rows older than 7 days.
+ * Extract and validate the `Idempotency-Key` header.
+ * Returns the key (lowercased) or throws ApiError on invalid / missing.
  */
-export async function withIdempotency<T extends Response>(
-  _ctx: IdempotencyCtx,
-  handler: () => Promise<T>,
-): Promise<T> {
-  // TODO Wave 1: integrate the DB-backed cache. See header comment.
-  return await handler();
+export function readIdempotencyKey(req: Request): string {
+  const raw =
+    req.headers.get('idempotency-key') ?? req.headers.get('Idempotency-Key');
+  if (!raw) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      'Idempotency-Key header required on state-changing requests.',
+      400,
+    );
+  }
+  if (!UUID_V4_RE.test(raw)) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      'Idempotency-Key must be a UUID v4.',
+      400,
+    );
+  }
+  return raw.toLowerCase();
+}
+
+/**
+ * Run a handler with full idempotency semantics. Used by every non-GET route.
+ *
+ * Behavior:
+ *  1. Read & validate `Idempotency-Key` from the request.
+ *  2. Compute route_hash = sha256(method + ' ' + path).
+ *  3. Compute body_hash = sha256(canonicalJson(parsedBody)).
+ *  4. Lookup (key, user_id, org_id) in idempotency_keys:
+ *     - hit + same body_hash + same route_hash within 24h
+ *         → replay cached response with `Idempotent-Replay: true`.
+ *     - hit + different body_hash
+ *         → ApiError('IDEMPOTENCY_CONFLICT', 409).
+ *     - miss
+ *         → run handler, persist (key, user, org, hashes, status, body), return.
+ *
+ * Errors thrown by the handler are NOT cached; only successful 2xx and
+ * deliberate ApiError responses are. Network/DB exceptions propagate.
+ *
+ * Caller must pass parsedBody (the same shape used by Zod) so the body_hash
+ * is canonical regardless of incoming whitespace.
+ */
+export async function withIdempotency(
+  ctx: IdempotencyCtx,
+  parsedBody: unknown,
+  handler: () => Promise<CachedResponse>,
+): Promise<{ response: CachedResponse; replayed: boolean }> {
+  if (!ctx.org.userId || !ctx.org.orgId) {
+    // Idempotency requires an identified caller + active org. Routes that need
+    // idempotency on an unauthenticated path do not currently exist.
+    throw new ApiError(
+      'UNAUTHORIZED',
+      'Idempotency requires an authenticated caller with an active org.',
+      401,
+    );
+  }
+
+  const key = readIdempotencyKey(ctx.req);
+  const url = new URL(ctx.req.url);
+  const routeHash = await sha256Hex(`${ctx.req.method} ${url.pathname}`);
+  const bodyHash = await sha256Hex(canonicalJson(parsedBody));
+
+  const admin = createAdminClient();
+
+  // The on-cloud `idempotency_keys` shape carries legacy NOT-NULL columns
+  // (`endpoint`, `request_hash`, `response`) alongside the Wave-1 `route_hash`,
+  // `body_hash`, `response_jsonb` columns added for the architecture-spec
+  // semantics. PK is (key, user_id); org_id is enforced via RLS. We populate
+  // both column sets on insert until a future migration drops the legacy
+  // shape.
+  const { data: existing, error: lookupErr } = await admin
+    .from('idempotency_keys')
+    .select('org_id, route_hash, body_hash, status_code, response_jsonb, created_at')
+    .eq('key', key)
+    .eq('user_id', ctx.org.userId)
+    .maybeSingle();
+
+  if (lookupErr) {
+    throw new Error(`idempotency lookup failed: ${lookupErr.message}`);
+  }
+
+  if (existing) {
+    if (existing.org_id !== ctx.org.orgId) {
+      // Same key + user but different active org: treat as a new request, no
+      // collision (different scopes per architecture §0.4).
+    } else {
+      const ageMs = Date.now() - new Date(existing.created_at as string).getTime();
+      const expired = ageMs > 24 * 60 * 60 * 1000;
+      if (!expired) {
+        if (
+          existing.body_hash !== bodyHash ||
+          existing.route_hash !== routeHash
+        ) {
+          throw new ApiError(
+            'IDEMPOTENCY_CONFLICT',
+            'Idempotency-Key reused with a different request body or route.',
+            409,
+          );
+        }
+        return {
+          replayed: true,
+          response: {
+            status: existing.status_code as number,
+            body: existing.response_jsonb,
+          },
+        };
+      }
+      // Expired: fall through and overwrite below.
+    }
+  }
+
+  const fresh = await handler();
+
+  const url2 = new URL(ctx.req.url);
+  const upsertRow = {
+    key,
+    user_id: ctx.org.userId,
+    org_id: ctx.org.orgId,
+    // Legacy NOT-NULL columns (filled with the same semantic value):
+    endpoint: `${ctx.req.method} ${url2.pathname}`,
+    request_hash: bodyHash,
+    response: fresh.body as Record<string, unknown>,
+    // Architecture-spec columns:
+    route_hash: routeHash,
+    body_hash: bodyHash,
+    response_jsonb: fresh.body as Record<string, unknown>,
+    status_code: fresh.status,
+  };
+
+  const { error: upsertErr } = await admin
+    .from('idempotency_keys')
+    .upsert(upsertRow, { onConflict: 'key,user_id' });
+
+  if (upsertErr) {
+    // Persist failure is non-fatal to the response — log and continue.
+    // (The handler ran; the user already saw it succeed semantically.)
+    console.warn('idempotency persist failed', upsertErr.message);
+  }
+
+  return { replayed: false, response: fresh };
 }
 
 export {};

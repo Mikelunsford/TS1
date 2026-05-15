@@ -38,10 +38,11 @@ export const CentsSchema = z.union([z.number().int(), z.string()]); // wire form
 export const RoleSchema = z.enum([
   'org_owner',
   'org_admin',
-  'manager',
-  'staff',
+  'sales',
+  'ops',
+  'accounting',
+  'viewer',
   'customer_user',
-  'vendor',
 ]);
 export type Role = z.infer<typeof RoleSchema>;
 
@@ -113,3 +114,81 @@ export const HealthSchema = z.object({
   bundle: z.string(),
 });
 export type Health = z.infer<typeof HealthSchema>;
+
+// =========================================================================
+// Tenants / host resolution (Wave 1)
+// =========================================================================
+
+/**
+ * Returned by `GET /tenants-api/tenants/resolve-host?host=<host>` (public,
+ * verify_jwt=false). Vercel middleware calls this on cold page requests to
+ * translate a tenant subdomain (or verified vanity domain) into an org_id
+ * before the SPA boots. See TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md §7.
+ */
+export const HostResolveSchema = z.object({
+  org_id: UuidSchema,
+  slug: z.string().min(1).max(63),
+  display_name: z.string().min(1),
+  default_locale: z.string().min(1),
+  default_timezone: z.string().min(1),
+  default_currency_code: z.string().length(3),
+  primary_color: z.string(),
+  accent_color: z.string(),
+});
+export type HostResolve = z.infer<typeof HostResolveSchema>;
+
+// =========================================================================
+// Auth (Wave 1)
+// =========================================================================
+
+/** Subset of org_memberships returned alongside `/auth-api/me`. */
+export const MeMembershipSchema = z.object({
+  org_id: UuidSchema,
+  slug: z.string().min(1).max(63),
+  display_name: z.string().min(1),
+  role: RoleSchema,
+});
+export type MeMembership = z.infer<typeof MeMembershipSchema>;
+
+/** Returned by `GET /auth-api/me`. */
+export const AuthMeSchema = z.object({
+  user_id: UuidSchema,
+  email: z.string().email(),
+  display_name: z.string().nullable(),
+  active_org_id: UuidSchema.nullable(),
+  active_role: RoleSchema.nullable(),
+  memberships: z.array(MeMembershipSchema),
+});
+export type AuthMe = z.infer<typeof AuthMeSchema>;
+
+/** Request body for `POST /auth-api/sessions/switch-org`. */
+export const SwitchOrgRequestSchema = z.object({
+  org_id: UuidSchema,
+});
+export type SwitchOrgRequest = z.infer<typeof SwitchOrgRequestSchema>;
+
+/** Response from `POST /auth-api/sessions/switch-org`. */
+export const SwitchOrgResponseSchema = z.object({
+  active_org_id: UuidSchema,
+  active_role: RoleSchema,
+});
+export type SwitchOrgResponse = z.infer<typeof SwitchOrgResponseSchema>;
+
+// =========================================================================
+// Branding (Wave 1)
+// =========================================================================
+
+/** Returned by `GET /tenants-api/branding` (authenticated, caller's org). */
+export const BrandingReadSchema = z.object({
+  org_id: UuidSchema,
+  logo_url: z.string().nullable(),
+  icon_url: z.string().nullable(),
+  email_logo_url: z.string().nullable(),
+  primary_color: z.string(),
+  accent_color: z.string(),
+  on_primary: z.string(),
+  font_family: z.string(),
+  app_name_override: z.string().nullable(),
+  support_url: z.string().nullable(),
+});
+export type BrandingRead = z.infer<typeof BrandingReadSchema>;
