@@ -35,6 +35,17 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter web exec playwright install --with-deps chromium
 
+      - name: Probe env sanity
+        run: |
+          echo "url_len=${#VITE_SUPABASE_URL}"
+          echo "anon_len=${#VITE_SUPABASE_ANON_KEY}"
+          echo "sr_len=${#SUPABASE_SERVICE_ROLE_KEY}"
+          echo "url_prefix=${VITE_SUPABASE_URL:0:8}"
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Run RLS probe
         run: pnpm test:rls
         env:
