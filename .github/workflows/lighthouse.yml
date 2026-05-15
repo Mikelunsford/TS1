@@ -1,5 +1,13 @@
 name: Lighthouse CI
 
+# Gated off by default. The action's Lighthouse runner can't reach Vercel
+# previews while Deployment Protection is enabled (returns HTTP 401 → 404
+# inside the auth redirect). Re-enable by setting the repo variable
+# `LIGHTHOUSE_ENABLED` to `true` once Vercel preview protection is dropped
+# (Vercel → ts-1 → Settings → Deployment Protection), OR after adding a
+# Vercel "Protection Bypass for Automation" secret here and to the action.
+# See R-W0-10 in 03-workspace/journal/2026-05-14-wave-0-closeout.md.
+
 on:
   pull_request:
     branches: [main]
@@ -7,6 +15,7 @@ on:
 jobs:
   lighthouse:
     name: Lighthouse against preview
+    if: vars.LIGHTHOUSE_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

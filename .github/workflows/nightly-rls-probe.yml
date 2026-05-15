@@ -1,8 +1,18 @@
 name: Nightly RLS probe
 
+# Schedule trigger is intentionally disabled until Wave 1 ships the real
+# two-org RLS probe. The Wave 0 stub at apps/web/playwright/rls-probe.spec.ts
+# is a placeholder; running it nightly produces noise, not signal. To
+# re-enable a nightly cron after Wave 1, restore the `schedule:` block
+# below. See R-W0-04 / R-W0-05 in
+# 03-workspace/journal/2026-05-14-wave-0-closeout.md.
+#
+# on:
+#   schedule:
+#     - cron: '0 9 * * *' # 09:00 UTC daily = 04:00 ET / 02:00 MT
+#   workflow_dispatch:
+
 on:
-  schedule:
-    - cron: '0 9 * * *' # 09:00 UTC daily = 04:00 ET / 02:00 MT
   workflow_dispatch:
 
 jobs:
