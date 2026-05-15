@@ -217,6 +217,149 @@ async function seedContact(
   return { customer_id, contact_id: data.id as string };
 }
 
+// =========================================================================
+// Wave 3 seed helpers — sales-chassis tenant-scoped tables.
+// =========================================================================
+
+/** Seed an item (formerly pricing_menu; renamed in 0049). Returns the id. */
+async function seedItem(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'itm');
+  // item_code is GLOBALLY unique (legacy constraint from 0001_init.sql), not
+  // org-scoped. Use the per-fixture uniquifier to avoid collisions across
+  // parallel test runs.
+  const { data, error } = await admin
+    .from('items')
+    .insert({
+      org_id: fx.org_id,
+      item_code: `RLS-${suffix}`,
+      description: `RLS Probe Item ${suffix}`,
+      item_kind: 'material',
+      unit_price_cents: 10000,
+      unit_cost_cents: 8000,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`item seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/**
+ * Seed a tax row. `is_default=false` so we don't collide with the
+ * per-org partial unique index `uq_taxes_default_per_org WHERE is_default`
+ * — the 0049 seed already inserted a default TAX-0 row per org.
+ */
+async function seedTax(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'tax');
+  const { data, error } = await admin
+    .from('taxes')
+    .insert({
+      org_id: fx.org_id,
+      code: `RLS-${suffix}`,
+      label: `RLS Probe Tax ${suffix}`,
+      rate: 0.05,
+      is_active: true,
+      is_default: false,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`tax seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/**
+ * Seed a payment_method row. `is_default=false` to avoid the per-org
+ * partial unique index on `(org_id) WHERE is_default`.
+ */
+async function seedPaymentMethod(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'pm');
+  const { data, error } = await admin
+    .from('payment_methods')
+    .insert({
+      org_id: fx.org_id,
+      code: `rls-${suffix}`,
+      label: `RLS Probe Method ${suffix}`,
+      is_active: true,
+      is_default: false,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`payment_method seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Seed an item_category row owned by `fx.org_id`. */
+async function seedItemCategory(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'cat');
+  const { data, error } = await admin
+    .from('item_categories')
+    .insert({
+      org_id: fx.org_id,
+      code: `rls-${suffix}`,
+      label: `RLS Probe Cat ${suffix}`,
+      is_active: true,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`item_category seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Seed a unit row owned by `fx.org_id`. */
+async function seedUnit(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'un');
+  const { data, error } = await admin
+    .from('units')
+    .insert({
+      org_id: fx.org_id,
+      code: `rls-${suffix}`,
+      label: `RLS Probe Unit ${suffix}`,
+      family: 'count',
+      is_active: true,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`unit seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/**
+ * Seed an exchange_rate row.
+ *
+ * NOTE: `public.exchange_rates` has NO `org_id` column — it is GLOBAL reference
+ * data (see migration 0033). Its SELECT policy is unconditional (`qual: true`).
+ * Cross-tenant filtering does not apply here; this seeder is used only by the
+ * single positive-control test ("any signed-in caller sees the same rows").
+ * We pick a unique `(base_code, quote_code, as_of)` tuple per invocation to
+ * avoid the unique constraint colliding across parallel test runs.
+ */
+async function seedExchangeRate(): Promise<string> {
+  const admin = adminClient();
+  // The `as_of` column is a DATE; collisions in (base_code, quote_code, as_of)
+  // are 409s. The unique-date trick: pick a date so far in the future that
+  // production data never reaches it. We shift the year forward by a random
+  // 100..999 to keep the date valid (year 2100..2999, comfortably valid).
+  const yearOffset = 100 + Math.floor(Math.random() * 900);
+  const asOf = `${2126 + yearOffset}-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}-${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}`;
+  const { data, error } = await admin
+    .from('exchange_rates')
+    .insert({
+      base_code: 'USD',
+      quote_code: 'EUR',
+      rate: 0.85 + Math.random() * 0.1,
+      as_of: asOf,
+      source: 'rls-probe',
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`exchange_rate seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
@@ -228,6 +371,16 @@ async function teardown(fx: OrgFixture): Promise<void> {
   await admin.from('contacts').delete().eq('org_id', fx.org_id);
   await admin.from('activities').delete().eq('org_id', fx.org_id);
   await admin.from('customers').delete().eq('org_id', fx.org_id);
+  // Wave 3 sales-chassis tenant-scoped tables. items.tax_id, items.unit_id,
+  // items.category_id reference taxes/units/item_categories so delete items
+  // first (they ON DELETE SET NULL but explicit ordering is cheaper than
+  // discovering edge cases). taxes.org_id and payment_methods.org_id are
+  // ON DELETE RESTRICT, so delete those rows before the org row.
+  await admin.from('items').delete().eq('org_id', fx.org_id);
+  await admin.from('item_categories').delete().eq('org_id', fx.org_id);
+  await admin.from('units').delete().eq('org_id', fx.org_id);
+  await admin.from('taxes').delete().eq('org_id', fx.org_id);
+  await admin.from('payment_methods').delete().eq('org_id', fx.org_id);
   await admin.auth.admin.deleteUser(fx.user_id);
   await admin.from('org_branding').delete().eq('org_id', fx.org_id);
   await admin.from('org_settings').delete().eq('org_id', fx.org_id);
@@ -425,6 +578,212 @@ test.describe('Cross-tenant RLS probe', () => {
     expect(res.status(), 'cross-org switch must NOT FOUND, not throw FORBIDDEN').toBe(404);
     const json = (await res.json()) as { error: { code: string } };
     expect(json.error.code).toBe('NOT_FOUND');
+  });
+
+  // =========================================================================
+  // Wave 3 sales-chassis cross-tenant matrix.
+  // For each org-scoped finance/inventory table: orgA seeds a row; orgB's JWT
+  // sees zero. Positive control: orgA sees its own row.
+  // =========================================================================
+
+  test('user B cannot read user A item via PostgREST', async ({ request }) => {
+    const itemA = await seedItem(orgA);
+    try {
+      const res = await request.get(`${SUPABASE_URL!}/rest/v1/items?id=eq.${itemA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgB.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A items').toHaveLength(0);
+
+      const ownRes = await request.get(`${SUPABASE_URL!}/rest/v1/items?id=eq.${itemA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgA.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own item').toBe(1);
+      expect(ownBody[0]!.id).toBe(itemA);
+    } finally {
+      await adminClient().from('items').delete().eq('id', itemA);
+    }
+  });
+
+  test('user B cannot read user A tax via PostgREST', async ({ request }) => {
+    const taxA = await seedTax(orgA);
+    try {
+      const res = await request.get(`${SUPABASE_URL!}/rest/v1/taxes?id=eq.${taxA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgB.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A taxes').toHaveLength(0);
+
+      const ownRes = await request.get(`${SUPABASE_URL!}/rest/v1/taxes?id=eq.${taxA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgA.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own tax').toBe(1);
+      expect(ownBody[0]!.id).toBe(taxA);
+    } finally {
+      await adminClient().from('taxes').delete().eq('id', taxA);
+    }
+  });
+
+  test('user B cannot read user A payment_method via PostgREST', async ({ request }) => {
+    const pmA = await seedPaymentMethod(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/payment_methods?id=eq.${pmA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A payment_methods').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/payment_methods?id=eq.${pmA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own payment_method').toBe(1);
+      expect(ownBody[0]!.id).toBe(pmA);
+    } finally {
+      await adminClient().from('payment_methods').delete().eq('id', pmA);
+    }
+  });
+
+  test('user B cannot read user A item_category via PostgREST', async ({ request }) => {
+    const catA = await seedItemCategory(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/item_categories?id=eq.${catA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A item_categories').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/item_categories?id=eq.${catA}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own item_category').toBe(1);
+      expect(ownBody[0]!.id).toBe(catA);
+    } finally {
+      await adminClient().from('item_categories').delete().eq('id', catA);
+    }
+  });
+
+  test('user B cannot read user A unit via PostgREST', async ({ request }) => {
+    const unitA = await seedUnit(orgA);
+    try {
+      const res = await request.get(`${SUPABASE_URL!}/rest/v1/units?id=eq.${unitA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgB.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A units').toHaveLength(0);
+
+      const ownRes = await request.get(`${SUPABASE_URL!}/rest/v1/units?id=eq.${unitA}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgA.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own unit').toBe(1);
+      expect(ownBody[0]!.id).toBe(unitA);
+    } finally {
+      await adminClient().from('units').delete().eq('id', unitA);
+    }
+  });
+
+  /**
+   * `public.exchange_rates` has NO `org_id`; it is GLOBAL reference data
+   * with an unconditional SELECT policy (qual: true; see migration 0033).
+   * A cross-tenant probe is not meaningful here — by design, any signed-in
+   * caller from any org sees the same rows. Assert that property positively:
+   * orgA seeds a unique-tuple row, then both orgA and orgB read it.
+   */
+  test('exchange_rates: both orgs see the same global row (no org_id filter)', async ({
+    request,
+  }) => {
+    const rateId = await seedExchangeRate();
+    try {
+      const headers = (token: string) => ({
+        apikey: ANON_KEY!,
+        authorization: `Bearer ${token}`,
+        accept: 'application/json',
+      });
+      const resA = await request.get(
+        `${SUPABASE_URL!}/rest/v1/exchange_rates?id=eq.${rateId}`,
+        { headers: headers(orgA.access_token) },
+      );
+      const resB = await request.get(
+        `${SUPABASE_URL!}/rest/v1/exchange_rates?id=eq.${rateId}`,
+        { headers: headers(orgB.access_token) },
+      );
+      expect(resA.status()).toBe(200);
+      expect(resB.status()).toBe(200);
+      const bodyA = (await resA.json()) as Array<{ id: string }>;
+      const bodyB = (await resB.json()) as Array<{ id: string }>;
+      expect(bodyA.length, 'org A must see the global rate').toBe(1);
+      expect(bodyB.length, 'org B must see the same global rate').toBe(1);
+      expect(bodyA[0]!.id).toBe(rateId);
+      expect(bodyB[0]!.id).toBe(rateId);
+    } finally {
+      await adminClient().from('exchange_rates').delete().eq('id', rateId);
+    }
   });
 
   test('tenants-api/branding returns org B branding to org B', async ({ request }) => {
