@@ -30,6 +30,12 @@ const QuoteCreatePage = lazy(() => import('./pages/quotes/QuoteCreatePage'));
 const QuoteDetailPage = lazy(() => import('./pages/quotes/QuoteDetailPage'));
 // end quotes lazy.
 
+// Projects (Wave 4 / 4.3b) — FE-B owns this block.
+const ProjectsListPage = lazy(() => import('./pages/projects/ProjectsListPage'));
+const ProjectCreatePage = lazy(() => import('./pages/projects/ProjectCreatePage'));
+const ProjectDetailPage = lazy(() => import('./pages/projects/ProjectDetailPage'));
+// end projects lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -166,6 +172,32 @@ export function AppRoutes() {
           }
         />
         {/* end quotes routes. */}
+        {/* Projects (Wave 4 / 4.3b) — FE-B owns this block. */}
+        <Route
+          path="/projects"
+          element={
+            <ProtectedRoute>
+              <ProjectsListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/new"
+          element={
+            <ProtectedRoute>
+              <ProjectCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/:id"
+          element={
+            <ProtectedRoute>
+              <ProjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end projects routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"
