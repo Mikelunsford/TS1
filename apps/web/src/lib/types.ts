@@ -501,3 +501,276 @@ export const ActivitySchema = z.object({
   updated_at: TimestampSchema,
 });
 export type Activity = z.infer<typeof ActivitySchema>;
+
+// =========================================================================
+// Finance — Currencies (Wave 3, Phase 3 sales chassis)
+// =========================================================================
+
+/**
+ * Currency display configuration. `public.currencies` is a global table
+ * (no `org_id`); rows are shared across all orgs. POST upserts by `code`.
+ * See TS1/09-api/00-API-CONTRACT.md §7.
+ */
+export const CurrencySchema = z.object({
+  code: z.string().length(3),
+  label: z.string().min(1),
+  symbol: z.string().min(1),
+  symbol_position: z.enum(['before', 'after']),
+  decimal_sep: z.string().min(1).max(4),
+  thousand_sep: z.string().max(4),
+  cent_precision: z.number().int().min(0).max(6),
+  zero_format: z.boolean(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Currency = z.infer<typeof CurrencySchema>;
+
+/** Upsert body for `POST /finance-api/currencies`. */
+export const CurrencyUpsertSchema = z.object({
+  code: z.string().length(3),
+  label: z.string().min(1).max(80),
+  symbol: z.string().min(1).max(8),
+  symbol_position: z.enum(['before', 'after']).default('before'),
+  decimal_sep: z.string().min(1).max(4).default('.'),
+  thousand_sep: z.string().max(4).default(','),
+  cent_precision: z.number().int().min(0).max(6).default(2),
+  zero_format: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+});
+export type CurrencyUpsert = z.infer<typeof CurrencyUpsertSchema>;
+
+/** Patch body for `PATCH /finance-api/currencies/:code`. `code` is immutable. */
+export const CurrencyPatchSchema = CurrencyUpsertSchema.omit({ code: true }).partial();
+export type CurrencyPatch = z.infer<typeof CurrencyPatchSchema>;
+
+// =========================================================================
+// Finance — Exchange Rates (Wave 3)
+// =========================================================================
+
+/** Response row for exchange rate endpoints. */
+export const ExchangeRateSchema = z.object({
+  id: UuidSchema,
+  base_code: z.string().length(3),
+  quote_code: z.string().length(3),
+  rate: z.union([z.number(), z.string()]),
+  as_of: z.string(),
+  source: z.string(),
+  created_at: TimestampSchema,
+  created_by: UuidSchema.nullable(),
+});
+export type ExchangeRate = z.infer<typeof ExchangeRateSchema>;
+
+/**
+ * Insert body for `POST /finance-api/exchange-rates`. Server rejects
+ * duplicates of `(base_code, quote_code, as_of)` with 409 STATE_CONFLICT.
+ */
+export const ExchangeRateInsertSchema = z.object({
+  base_code: z.string().length(3),
+  quote_code: z.string().length(3),
+  rate: z.number().positive(),
+  as_of: z.string().date(),
+  source: z.string().max(64).default('manual'),
+});
+export type ExchangeRateInsert = z.infer<typeof ExchangeRateInsertSchema>;
+
+// =========================================================================
+// Finance — Taxes (Wave 3)
+// =========================================================================
+
+/**
+ * Tax row. NOTE: DB stores `rate` as `numeric(7,6)` (0..1; e.g. 0.0875 = 8.75%).
+ * The API contract §7 proposed `rate_bp` (basis points); the schema and the
+ * contract diverged during 0049. We expose `rate` (0..1 decimal) on the wire
+ * to match the DB. F-Wave3-XX may align later.
+ */
+export const TaxSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1),
+  label: z.string().min(1),
+  rate: z.union([z.number(), z.string()]),
+  jurisdiction: z.string().nullable(),
+  is_compound: z.boolean(),
+  is_inclusive: z.boolean(),
+  is_default: z.boolean(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Tax = z.infer<typeof TaxSchema>;
+
+/** Create body for `POST /finance-api/taxes`. */
+export const TaxCreateSchema = z.object({
+  code: z.string().min(1).max(40),
+  label: z.string().min(1).max(120),
+  rate: z.number().min(0).max(1),
+  jurisdiction: z.string().max(120).nullable().optional(),
+  is_compound: z.boolean().default(false),
+  is_inclusive: z.boolean().default(false),
+  is_default: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+});
+export type TaxCreate = z.infer<typeof TaxCreateSchema>;
+
+/** Patch body for `PATCH /finance-api/taxes/:id`. All keys optional. */
+export const TaxPatchSchema = TaxCreateSchema.partial();
+export type TaxPatch = z.infer<typeof TaxPatchSchema>;
+
+// =========================================================================
+// Finance — Payment Methods (Wave 3)
+// =========================================================================
+
+/** Payment method row. Org-scoped; partial unique on `(org_id) WHERE is_default`. */
+export const PaymentMethodSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().nullable(),
+  is_default: z.boolean(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
+
+/** Create body for `POST /finance-api/payment-methods`. */
+export const PaymentMethodCreateSchema = z.object({
+  code: z.string().min(1).max(40),
+  label: z.string().min(1).max(120),
+  description: z.string().max(500).nullable().optional(),
+  is_default: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+});
+export type PaymentMethodCreate = z.infer<typeof PaymentMethodCreateSchema>;
+
+/** Patch body for `PATCH /finance-api/payment-methods/:id`. All keys optional. */
+export const PaymentMethodPatchSchema = PaymentMethodCreateSchema.partial();
+export type PaymentMethodPatch = z.infer<typeof PaymentMethodPatchSchema>;
+
+// =========================================================================
+// Inventory — Item Kind (Wave 3)
+// =========================================================================
+
+export const ItemKindSchema = z.enum(['labor', 'material', 'pass_through', 'fee', 'service']);
+export type ItemKind = z.infer<typeof ItemKindSchema>;
+
+// =========================================================================
+// Inventory — Item Categories (Wave 3)
+// =========================================================================
+
+/**
+ * Item category row. Org-scoped; `parent_id` allows a self-referential tree.
+ * The list endpoint returns a flat array; the SPA composes the tree.
+ */
+export const ItemCategorySchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1),
+  label: z.string().min(1),
+  parent_id: UuidSchema.nullable(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ItemCategory = z.infer<typeof ItemCategorySchema>;
+
+/** Create body for `POST /inventory-api/item-categories`. */
+export const ItemCategoryCreateSchema = z.object({
+  code: z.string().min(1).max(40),
+  label: z.string().min(1).max(120),
+  parent_id: UuidSchema.nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+export type ItemCategoryCreate = z.infer<typeof ItemCategoryCreateSchema>;
+
+/** Patch body for `PATCH /inventory-api/item-categories/:id`. All keys optional. */
+export const ItemCategoryPatchSchema = ItemCategoryCreateSchema.partial();
+export type ItemCategoryPatch = z.infer<typeof ItemCategoryPatchSchema>;
+
+// =========================================================================
+// Inventory — Units (Wave 3)
+// =========================================================================
+
+/** Unit of measure row. Org-scoped. */
+export const UnitSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1),
+  label: z.string().min(1),
+  family: z.string().nullable(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Unit = z.infer<typeof UnitSchema>;
+
+/** Create body for `POST /inventory-api/units`. */
+export const UnitCreateSchema = z.object({
+  code: z.string().min(1).max(40),
+  label: z.string().min(1).max(120),
+  family: z.string().max(40).nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+export type UnitCreate = z.infer<typeof UnitCreateSchema>;
+
+/** Patch body for `PATCH /inventory-api/units/:id`. All keys optional. */
+export const UnitPatchSchema = UnitCreateSchema.partial();
+export type UnitPatch = z.infer<typeof UnitPatchSchema>;
+
+// =========================================================================
+// Inventory — Items (Wave 3)
+// =========================================================================
+
+/**
+ * Item row (renamed from pricing_menu in migration 0049). The legacy
+ * free-text `category` column remains alongside the new `category_id` FK
+ * for back-compat with the 34 pre-Wave-0 seed rows; new rows should
+ * populate `category_id`. The SPA category picker reads `category_id`.
+ */
+export const ItemSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  item_code: z.string().min(1),
+  description: z.string().min(1),
+  /** @deprecated free-text category; use `category_id` for new rows. */
+  category: z.string().nullable(),
+  category_id: UuidSchema.nullable(),
+  item_kind: ItemKindSchema,
+  markup_pct: z.union([z.number(), z.string()]).nullable(),
+  unit_price_cents: CentsSchema,
+  unit_cost_cents: CentsSchema,
+  currency_code: z.string().nullable(),
+  unit_id: UuidSchema.nullable(),
+  tax_id: UuidSchema.nullable(),
+  is_inventoried: z.boolean(),
+  reorder_point: z.union([z.number(), z.string()]).nullable(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Item = z.infer<typeof ItemSchema>;
+
+/** Create body for `POST /inventory-api/items`. */
+export const ItemCreateSchema = z.object({
+  item_code: z.string().min(1).max(80),
+  description: z.string().min(1).max(500),
+  item_kind: ItemKindSchema.default('material'),
+  category_id: UuidSchema.nullable().optional(),
+  category: z.string().max(120).nullable().optional(),
+  markup_pct: z.number().nullable().optional(),
+  unit_price_cents: z.number().int().nonnegative().default(0),
+  unit_cost_cents: z.number().int().nonnegative().default(0),
+  currency_code: z.string().length(3).nullable().optional(),
+  unit_id: UuidSchema.nullable().optional(),
+  tax_id: UuidSchema.nullable().optional(),
+  is_inventoried: z.boolean().default(false),
+  reorder_point: z.number().nullable().optional(),
+  is_active: z.boolean().default(true),
+});
+export type ItemCreate = z.infer<typeof ItemCreateSchema>;
+
+/** Patch body for `PATCH /inventory-api/items/:id`. All keys optional. */
+export const ItemPatchSchema = ItemCreateSchema.partial();
+export type ItemPatch = z.infer<typeof ItemPatchSchema>;

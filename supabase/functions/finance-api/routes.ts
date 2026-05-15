@@ -1,9 +1,35 @@
 /**
  * finance-api — route table.
+ *
+ * Wave 3 / Phase 3 sales chassis: currencies, exchange rates, taxes,
+ * payment methods. Expenses, COA, journal entries land in later waves.
+ * See TS1/09-api/00-API-CONTRACT.md §7.
  */
 
 import type { Route } from '../_shared/route.ts';
 import { ok } from '../_shared/responses.ts';
+import {
+  listCurrencies,
+  patchCurrency,
+  upsertCurrency,
+} from './handlers/currencies.ts';
+import {
+  createExchangeRate,
+  listExchangeRates,
+} from './handlers/exchange-rates.ts';
+import {
+  archiveTax,
+  createTax,
+  getTax,
+  listTaxes,
+  patchTax,
+} from './handlers/taxes.ts';
+import {
+  createPaymentMethod,
+  deletePaymentMethod,
+  listPaymentMethods,
+  patchPaymentMethod,
+} from './handlers/payment-methods.ts';
 
 const BUNDLE = 'finance-api';
 
@@ -13,38 +39,26 @@ export const routes: Route[] = [
     path: '/',
     handler: ({ req }) => ok({ ok: true, bundle: BUNDLE }, undefined, { req }),
   },
-  // TODO Wave 1+: per TS1/09-api/01-EDGE-FUNCTIONS-MAP.md §2.9
-  //   GET    /taxes                                   — list
-  //   POST   /taxes                                   — create
-  //   GET    /taxes/:id                               — detail
-  //   PATCH  /taxes/:id                               — update
-  //   POST   /taxes/:id/archive                       — archive
-  //
-  //   GET    /currencies                              — list (global + org rows)
-  //   POST   /currencies                              — enable currency for org
-  //   PATCH  /currencies/:code                        — update display
-  //   GET    /exchange-rates?base=&quote=&from=&to=   — range query
-  //   POST   /exchange-rates                          — manual rate insert
-  //
-  //   GET    /expenses                                — list (own scope for submitter)
-  //   POST   /expenses                                — submit expense
-  //   GET    /expenses/:id                            — detail
-  //   PATCH  /expenses/:id                            — edit pending
-  //   POST   /expenses/:id/approve                    — approve
-  //   POST   /expenses/:id/reject                     — reject with reason
-  //
-  //   GET    /expense-categories                      — list
-  //   POST   /expense-categories                      — create
-  //   PATCH  /expense-categories/:id                  — update
-  //
-  //   GET    /chart-of-accounts                       — tree
-  //   POST   /chart-of-accounts                       — create account
-  //   PATCH  /chart-of-accounts/:id                   — update
-  //   POST   /chart-of-accounts/:id/archive           — archive
-  //
-  //   GET    /journal-entries                         — list with date range
-  //   POST   /journal-entries                         — draft entry
-  //   GET    /journal-entries/:id                     — detail
-  //   POST   /journal-entries/:id/post                — post (irreversible)
-  //   POST   /journal-entries/:id/reverse             — generate reversal
+
+  // Currencies (global table; no org scoping in queries)
+  { method: 'GET', path: '/currencies', handler: listCurrencies },
+  { method: 'POST', path: '/currencies', handler: upsertCurrency },
+  { method: 'PATCH', path: '/currencies/:code', handler: patchCurrency },
+
+  // Exchange rates (global table)
+  { method: 'GET', path: '/exchange-rates', handler: listExchangeRates },
+  { method: 'POST', path: '/exchange-rates', handler: createExchangeRate },
+
+  // Taxes (org-scoped)
+  { method: 'GET', path: '/taxes', handler: listTaxes },
+  { method: 'POST', path: '/taxes', handler: createTax },
+  { method: 'GET', path: '/taxes/:id', handler: getTax },
+  { method: 'PATCH', path: '/taxes/:id', handler: patchTax },
+  { method: 'POST', path: '/taxes/:id/archive', handler: archiveTax },
+
+  // Payment methods (org-scoped)
+  { method: 'GET', path: '/payment-methods', handler: listPaymentMethods },
+  { method: 'POST', path: '/payment-methods', handler: createPaymentMethod },
+  { method: 'PATCH', path: '/payment-methods/:id', handler: patchPaymentMethod },
+  { method: 'DELETE', path: '/payment-methods/:id', handler: deletePaymentMethod },
 ];
