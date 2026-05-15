@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Token system.
+ *
+ * Every color is expressed as a comma-separated `r g b` triplet so Tailwind's
+ * `rgb(var(--token) / <alpha-value>)` syntax can layer opacity on top. This is
+ * the seam tenants override at runtime via BrandingProvider (Wave 1+); the
+ * default values below are the Team1 platform brand.
+ *
+ * Source of truth: TS1/10-ui/03-THEME-TOKENS.md.
+ */
+
+:root {
+  /* Surfaces */
+  --bg: 255 255 255;
+  --bg-muted: 248 250 252;
+  --bg-subtle: 241 245 249;
+
+  /* Text */
+  --fg: 15 23 42;
+  --fg-muted: 71 85 105;
+  --fg-subtle: 148 163 184;
+
+  /* Borders */
+  --border: 226 232 240;
+  --border-strong: 203 213 225;
+
+  /* Brand (per-tenant overridable) */
+  --brand: 37 99 235;
+  --brand-fg: 255 255 255;
+  --brand-subtle: 219 234 254;
+
+  /* Accent */
+  --accent: 99 102 241;
+  --accent-fg: 255 255 255;
+
+  /* Semantic */
+  --success: 22 163 74;
+  --warning: 234 179 8;
+  --danger: 220 38 38;
+  --info: 14 165 233;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 15 23 42;
+    --bg-muted: 30 41 59;
+    --bg-subtle: 51 65 85;
+    --fg: 248 250 252;
+    --fg-muted: 203 213 225;
+    --fg-subtle: 148 163 184;
+    --border: 51 65 85;
+    --border-strong: 71 85 105;
+    --brand-subtle: 30 58 138;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: var(--font-sans);
+  }
+  *:focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+  }
+}

@@ -1,0 +1,39 @@
+name: Nightly RLS probe
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 09:00 UTC daily = 04:00 ET / 02:00 MT
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Cross-tenant RLS probe against staging
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9.7.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run RLS probe
+        run: pnpm test:rls
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-rls-report
+          path: apps/web/playwright-report

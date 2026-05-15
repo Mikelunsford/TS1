@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.vercel
+.next
+coverage
+playwright-report
+test-results
+apps/web/src/lib/database.types.ts
+supabase/.branches
+supabase/.temp
+pnpm-lock.yaml

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint, typecheck, unit + contract tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.7.0
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint (max-warnings 0)
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Contract tests (Zod canon parity)
+        run: pnpm test:contract
+
+      - name: Build SPA
+        run: pnpm build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_NAME: Team1
+          VITE_DEFAULT_TENANT_BRAND: team1
+          VITE_BASE_DOMAIN: team1.app
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 7

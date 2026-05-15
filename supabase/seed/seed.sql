@@ -1,0 +1,23 @@
+-- seed.sql
+-- Wave 0 seed surface: intentionally minimal.
+--
+-- The migrations themselves insert all baseline rows the platform needs:
+--   - default organization 00000000-0000-0000-0000-000000000001  (0029)
+--   - org branding row                                              (0029)
+--   - 7 system roles                                                (0029)
+--   - 16 org feature flags                                          (0029)
+--   - 8 currencies                                                  (0033)
+--   - 14 numbering sequences per org                                (0034)
+--   - 12 baseline + 23 expansion pricing menu items                 (0002 + 0023)
+--   - 13 job types                                                  (0014 + 0023)
+--   - 4 pallet size kinds, 1 value-added kind                       (0023 + 0028)
+--   - 1 demo quote template                                         (0019)
+--   - 33 QuickBooks-import customers + 3 demo customers             (0002 + 0020)
+--   - org_settings rows for app/company/money_format/client/invoice/quote
+--                                                                  (0037)
+--
+-- Wave 1 will populate fuller seed data here (demo memberships, demo
+-- invoices, exchange-rate snapshots, expense categories per industry).
+-- For Wave 0, deliberately empty:
+
+SELECT 'team1 wave-0 seed: handled inside migrations' AS note;

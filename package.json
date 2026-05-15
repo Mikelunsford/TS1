@@ -1,0 +1,34 @@
+{
+  "name": "team1",
+  "private": true,
+  "packageManager": "pnpm@9.7.0",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "preview": "pnpm --filter web preview",
+    "test": "pnpm --filter web test",
+    "test:contract": "pnpm --filter web test:contract",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "test:rls": "pnpm --filter web test:rls",
+    "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:diff": "supabase db diff",
+    "db:push": "supabase db push",
+    "db:gen-types": "supabase gen types typescript --local > apps/web/src/lib/database.types.ts",
+    "fn:serve": "supabase functions serve --no-verify-jwt",
+    "fn:deploy:all": "bash scripts/release/deploy-all-functions.sh"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "prettier": "3.3.3",
+    "@types/node": "20.14.0"
+  }
+}
