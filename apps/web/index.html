@@ -6,6 +6,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f172a" />
     <title>Team1</title>
+    <!--
+      Brand pre-bake. Reads the brand snapshot saved by BrandingProvider on
+      the previous session and applies CSS vars + title before React mounts
+      so repeat visitors never see the platform-default flash. First-time
+      visitors paint the default once and the BrandingProvider snapshots
+      after the first /branding load. Per TS1/07-architecture/03-WHITELABEL-MODEL.md.
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('t1_brand_bake');
+          if (!raw) return;
+          var b = JSON.parse(raw);
+          if (typeof b !== 'object' || !b) return;
+          var root = document.documentElement;
+          function hexToTriplet(hex) {
+            if (typeof hex !== 'string') return null;
+            var m = /^#?([a-f0-9]{6})$/i.exec(hex.trim());
+            if (!m) return null;
+            var n = parseInt(m[1], 16);
+            return ((n >> 16) & 0xff) + ' ' + ((n >> 8) & 0xff) + ' ' + (n & 0xff);
+          }
+          var brand = hexToTriplet(b.primary_color);
+          var accent = hexToTriplet(b.accent_color);
+          var brandFg = hexToTriplet(b.on_primary);
+          if (brand) root.style.setProperty('--brand', brand);
+          if (accent) root.style.setProperty('--accent', accent);
+          if (brandFg) root.style.setProperty('--brand-fg', brandFg);
+          if (typeof b.app_name === 'string' && b.app_name.length) {
+            document.title = b.app_name;
+          }
+          if (typeof b.icon_url === 'string' && b.icon_url.length) {
+            var link = document.querySelector('link[rel="icon"]');
+            if (link) link.href = b.icon_url;
+          }
+        } catch (_e) {
+          /* localStorage may be disabled — silently skip the bake. */
+        }
+      })();
+    </script>
   </head>
   <body class="bg-bg text-fg antialiased">
     <div id="root"></div>

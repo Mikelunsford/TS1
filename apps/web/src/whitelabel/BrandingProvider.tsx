@@ -46,6 +46,26 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       }
       link.href = favHref;
     }
+
+    // Snapshot for the next session's pre-React paint. The inline script
+    // in index.html reads this on boot to apply brand tokens, title, and
+    // favicon BEFORE React mounts — eliminates the platform-default flash
+    // for repeat visitors. First-time visitors still see one default paint.
+    try {
+      localStorage.setItem(
+        't1_brand_bake',
+        JSON.stringify({
+          org_id: data.org_id,
+          primary_color: data.primary_color,
+          accent_color: data.accent_color,
+          on_primary: data.on_primary,
+          app_name: appName,
+          icon_url: favHref ?? null,
+        }),
+      );
+    } catch {
+      /* localStorage may be disabled (private mode); the bake skip is fine. */
+    }
   }, [data]);
 
   return <>{children}</>;
