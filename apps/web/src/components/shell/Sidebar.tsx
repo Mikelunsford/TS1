@@ -137,7 +137,22 @@ const items: NavItem[] = [
     ],
   },
   // end finance / GL nav.
-  { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 8 },
+  // Reports polish (Wave 10) — A1 owns this block.
+  {
+    to: '/reports/ar-aging',
+    label: 'Reports',
+    icon: BarChart3,
+    requireCap: 'finance.reports.read',
+    children: [
+      { to: '/dashboard', label: 'Dashboard', icon: Home },
+      { to: '/reports/ar-aging', label: 'AR aging', icon: BarChart3 },
+      { to: '/reports/sales-by-customer', label: 'Sales by customer', icon: TrendingUp },
+      { to: '/reports/sales-by-item', label: 'Sales by item', icon: Boxes },
+      { to: '/reports/cash-position', label: 'Cash position', icon: Wallet },
+      { to: '/reports/expense-by-category', label: 'Expense by category', icon: Receipt },
+    ],
+  },
+  // End Reports polish (Wave 10).
   // Settings (Phase 15) — cap-gated to org_admin+. Phase15-FE block start.
   {
     to: '/settings',

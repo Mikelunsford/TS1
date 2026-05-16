@@ -107,6 +107,15 @@ const PaymentMethodsPage = lazy(() => import('./pages/settings/PaymentMethodsPag
 const ExchangeRatesPage = lazy(() => import('./pages/settings/ExchangeRatesPage'));
 // end settings lazy.
 
+// Reports polish (Wave 10) — A1 owns this block.
+const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage'));
+const ArAgingReportPage = lazy(() => import('./pages/reports/ArAgingReportPage'));
+const SalesByCustomerReportPage = lazy(() => import('./pages/reports/SalesByCustomerReportPage'));
+const SalesByItemReportPage = lazy(() => import('./pages/reports/SalesByItemReportPage'));
+const CashPositionReportPage = lazy(() => import('./pages/reports/CashPositionReportPage'));
+const ExpenseByCategoryReportPage = lazy(() => import('./pages/reports/ExpenseByCategoryReportPage'));
+// End Reports polish (Wave 10).
+
 // Settings hub (Phase 15) — Phase15-FE owns this block.
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
 const SettingsCompanyPage = lazy(() => import('./pages/settings/groups/Company'));
@@ -693,6 +702,56 @@ export function AppRoutes() {
           <Route path="exchange-rates" element={<ExchangeRatesPage />} />
         </Route>
         {/* end settings routes. */}
+        {/* Reports polish (Wave 10) — A1 owns this block. */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/ar-aging"
+          element={
+            <ProtectedRoute>
+              <ArAgingReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/sales-by-customer"
+          element={
+            <ProtectedRoute>
+              <SalesByCustomerReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/sales-by-item"
+          element={
+            <ProtectedRoute>
+              <SalesByItemReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/cash-position"
+          element={
+            <ProtectedRoute>
+              <CashPositionReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/expense-by-category"
+          element={
+            <ProtectedRoute>
+              <ExpenseByCategoryReportPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* End Reports polish (Wave 10). */}
         <Route
           path="/feature-unavailable"
           element={

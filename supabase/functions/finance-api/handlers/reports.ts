@@ -26,9 +26,24 @@ import {
   TrialBalanceRowSchema,
   ProfitLossRowSchema,
   BalanceSheetRowSchema,
+  ArAgingQuerySchema,
+  ArAgingRowSchema,
+  SalesByCustomerQuerySchema,
+  SalesByCustomerRowSchema,
+  SalesByItemQuerySchema,
+  SalesByItemRowSchema,
+  CashPositionQuerySchema,
+  CashPositionRowSchema,
+  ExpenseByCategoryQuerySchema,
+  ExpenseByCategoryRowSchema,
   type TrialBalanceRow,
   type ProfitLossRow,
   type BalanceSheetRow,
+  type ArAgingRow,
+  type SalesByCustomerRow,
+  type SalesByItemRow,
+  type CashPositionRow,
+  type ExpenseByCategoryRow,
 } from '../../_shared/types.ts';
 import { admin, requireCap } from '../_helpers.ts';
 
@@ -207,6 +222,389 @@ export async function getProfitLoss({ req, url }: Ctx): Promise<Response> {
     throw e;
   }
 }
+
+// =========================================================================
+// Wave 10 / Phase 18 polish handlers — Wave10-A1 owns this block.
+// SECURITY DEFINER RPCs ship in migration 0067 (Agent A3): ar_aging,
+// sales_by_customer, sales_by_item, cash_position, expense_by_category.
+// =========================================================================
+
+interface ArAgingRpcRow {
+  customer_id: string;
+  customer_name: string;
+  current_cents: number | string;
+  days_1_30_cents: number | string;
+  days_31_60_cents: number | string;
+  days_61_90_cents: number | string;
+  days_over_90_cents: number | string;
+  total_cents: number | string;
+}
+
+interface SalesByCustomerRpcRow {
+  customer_id: string;
+  customer_name: string;
+  invoice_count: number | string;
+  subtotal_cents: number | string;
+  tax_cents: number | string;
+  total_cents: number | string;
+}
+
+interface SalesByItemRpcRow {
+  item_id: string | null;
+  item_code: string | null;
+  item_name: string;
+  quantity: number | string;
+  subtotal_cents: number | string;
+  total_cents: number | string;
+}
+
+interface CashPositionRpcRow {
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  balance_cents: number | string;
+}
+
+interface ExpenseByCategoryRpcRow {
+  category_id: string | null;
+  category_name: string;
+  expense_count: number | string;
+  total_cents: number | string;
+}
+
+function toNum(v: number | string | null | undefined): number {
+  if (v === null || v === undefined) return 0;
+  const n = typeof v === 'string' ? Number(v) : v;
+  return Number.isFinite(n) ? n : 0;
+}
+
+// =========================================================================
+// GET /reports/ar-aging
+// =========================================================================
+export async function getArAging({ req, url }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'finance.reports.read');
+    const q = parseQuery(url, ArAgingQuerySchema);
+
+    const { data, error } = await admin().rpc('ar_aging', {
+      p_org_id: caller.orgId,
+      p_as_of: q.as_of,
+      p_currency_code: q.currency,
+    });
+    if (error) {
+      throw new ApiError('INTERNAL_ERROR', 'ar_aging RPC failed', 500, {
+        detail: error.message,
+      });
+    }
+
+    const raw = (data ?? []) as ArAgingRpcRow[];
+    const rows: ArAgingRow[] = raw.map((r) =>
+      ArAgingRowSchema.parse({
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        current_cents: toInt(r.current_cents),
+        days_1_30_cents: toInt(r.days_1_30_cents),
+        days_31_60_cents: toInt(r.days_31_60_cents),
+        days_61_90_cents: toInt(r.days_61_90_cents),
+        days_over_90_cents: toInt(r.days_over_90_cents),
+        total_cents: toInt(r.total_cents),
+      }),
+    );
+
+    let total_current_cents = 0;
+    let total_days_1_30_cents = 0;
+    let total_days_31_60_cents = 0;
+    let total_days_61_90_cents = 0;
+    let total_days_over_90_cents = 0;
+    let total_outstanding_cents = 0;
+    for (const r of rows) {
+      total_current_cents += r.current_cents;
+      total_days_1_30_cents += r.days_1_30_cents;
+      total_days_31_60_cents += r.days_31_60_cents;
+      total_days_61_90_cents += r.days_61_90_cents;
+      total_days_over_90_cents += r.days_over_90_cents;
+      total_outstanding_cents += r.total_cents;
+    }
+
+    return ok(
+      {
+        as_of: q.as_of,
+        currency: q.currency,
+        rows,
+        total_current_cents,
+        total_days_1_30_cents,
+        total_days_31_60_cents,
+        total_days_61_90_cents,
+        total_days_over_90_cents,
+        total_outstanding_cents,
+      },
+      undefined,
+      { req },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// GET /reports/sales-by-customer
+// =========================================================================
+export async function getSalesByCustomer({ req, url }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'finance.reports.read');
+    const q = parseQuery(url, SalesByCustomerQuerySchema);
+
+    if (q.end < q.start) {
+      throw new ApiError(
+        'VALIDATION_ERROR',
+        'end must be on or after start',
+        422,
+      );
+    }
+
+    const { data, error } = await admin().rpc('sales_by_customer', {
+      p_org_id: caller.orgId,
+      p_period_start: q.start,
+      p_period_end: q.end,
+      p_currency_code: q.currency,
+    });
+    if (error) {
+      throw new ApiError('INTERNAL_ERROR', 'sales_by_customer RPC failed', 500, {
+        detail: error.message,
+      });
+    }
+
+    const raw = (data ?? []) as SalesByCustomerRpcRow[];
+    const rows: SalesByCustomerRow[] = raw.map((r) =>
+      SalesByCustomerRowSchema.parse({
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        invoice_count: toInt(r.invoice_count),
+        subtotal_cents: toInt(r.subtotal_cents),
+        tax_cents: toInt(r.tax_cents),
+        total_cents: toInt(r.total_cents),
+      }),
+    );
+
+    let total_invoice_count = 0;
+    let total_subtotal_cents = 0;
+    let total_tax_cents = 0;
+    let total_sales_cents = 0;
+    for (const r of rows) {
+      total_invoice_count += r.invoice_count;
+      total_subtotal_cents += r.subtotal_cents;
+      total_tax_cents += r.tax_cents;
+      total_sales_cents += r.total_cents;
+    }
+
+    return ok(
+      {
+        period_start: q.start,
+        period_end: q.end,
+        currency: q.currency,
+        rows,
+        total_invoice_count,
+        total_subtotal_cents,
+        total_tax_cents,
+        total_sales_cents,
+      },
+      undefined,
+      { req },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// GET /reports/sales-by-item
+// =========================================================================
+export async function getSalesByItem({ req, url }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'finance.reports.read');
+    const q = parseQuery(url, SalesByItemQuerySchema);
+
+    if (q.end < q.start) {
+      throw new ApiError(
+        'VALIDATION_ERROR',
+        'end must be on or after start',
+        422,
+      );
+    }
+
+    const { data, error } = await admin().rpc('sales_by_item', {
+      p_org_id: caller.orgId,
+      p_period_start: q.start,
+      p_period_end: q.end,
+      p_currency_code: q.currency,
+    });
+    if (error) {
+      throw new ApiError('INTERNAL_ERROR', 'sales_by_item RPC failed', 500, {
+        detail: error.message,
+      });
+    }
+
+    const raw = (data ?? []) as SalesByItemRpcRow[];
+    const rows: SalesByItemRow[] = raw.map((r) =>
+      SalesByItemRowSchema.parse({
+        item_id: r.item_id,
+        item_code: r.item_code,
+        item_name: r.item_name,
+        quantity: toNum(r.quantity),
+        subtotal_cents: toInt(r.subtotal_cents),
+        total_cents: toInt(r.total_cents),
+      }),
+    );
+
+    let total_quantity = 0;
+    let total_subtotal_cents = 0;
+    let total_sales_cents = 0;
+    for (const r of rows) {
+      total_quantity += r.quantity;
+      total_subtotal_cents += r.subtotal_cents;
+      total_sales_cents += r.total_cents;
+    }
+
+    return ok(
+      {
+        period_start: q.start,
+        period_end: q.end,
+        currency: q.currency,
+        rows,
+        total_quantity,
+        total_subtotal_cents,
+        total_sales_cents,
+      },
+      undefined,
+      { req },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// GET /reports/cash-position
+// =========================================================================
+export async function getCashPosition({ req, url }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'finance.reports.read');
+    const q = parseQuery(url, CashPositionQuerySchema);
+
+    const { data, error } = await admin().rpc('cash_position', {
+      p_org_id: caller.orgId,
+      p_as_of: q.as_of,
+      p_currency_code: q.currency,
+    });
+    if (error) {
+      throw new ApiError('INTERNAL_ERROR', 'cash_position RPC failed', 500, {
+        detail: error.message,
+      });
+    }
+
+    const raw = (data ?? []) as CashPositionRpcRow[];
+    const rows: CashPositionRow[] = raw.map((r) =>
+      CashPositionRowSchema.parse({
+        account_id: r.account_id,
+        account_code: r.account_code,
+        account_name: r.account_name,
+        balance_cents: toInt(r.balance_cents),
+      }),
+    );
+
+    let total_cash_cents = 0;
+    for (const r of rows) total_cash_cents += r.balance_cents;
+
+    return ok(
+      {
+        as_of: q.as_of,
+        currency: q.currency,
+        rows,
+        total_cash_cents,
+      },
+      undefined,
+      { req },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// GET /reports/expense-by-category
+// =========================================================================
+export async function getExpenseByCategory({ req, url }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'finance.reports.read');
+    const q = parseQuery(url, ExpenseByCategoryQuerySchema);
+
+    if (q.end < q.start) {
+      throw new ApiError(
+        'VALIDATION_ERROR',
+        'end must be on or after start',
+        422,
+      );
+    }
+
+    const { data, error } = await admin().rpc('expense_by_category', {
+      p_org_id: caller.orgId,
+      p_period_start: q.start,
+      p_period_end: q.end,
+      p_currency_code: q.currency,
+    });
+    if (error) {
+      throw new ApiError('INTERNAL_ERROR', 'expense_by_category RPC failed', 500, {
+        detail: error.message,
+      });
+    }
+
+    const raw = (data ?? []) as ExpenseByCategoryRpcRow[];
+    const rows: ExpenseByCategoryRow[] = raw.map((r) =>
+      ExpenseByCategoryRowSchema.parse({
+        category_id: r.category_id,
+        category_name: r.category_name,
+        expense_count: toInt(r.expense_count),
+        total_cents: toInt(r.total_cents),
+      }),
+    );
+
+    let total_expense_count = 0;
+    let total_expenses_cents = 0;
+    for (const r of rows) {
+      total_expense_count += r.expense_count;
+      total_expenses_cents += r.total_cents;
+    }
+
+    return ok(
+      {
+        period_start: q.start,
+        period_end: q.end,
+        currency: q.currency,
+        rows,
+        total_expense_count,
+        total_expenses_cents,
+      },
+      undefined,
+      { req },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// End Wave 10 / Phase 18 polish handlers.
+// =========================================================================
 
 // =========================================================================
 // GET /reports/balance-sheet

@@ -4,6 +4,7 @@
 
 import type { Route } from '../_shared/route.ts';
 import { ok } from '../_shared/responses.ts';
+import { getDashboardSummary } from './handlers/summary.ts';
 
 const BUNDLE = 'dashboard-api';
 
@@ -13,6 +14,9 @@ export const routes: Route[] = [
     path: '/',
     handler: ({ req }) => ok({ ok: true, bundle: BUNDLE }, undefined, { req }),
   },
+  // Dashboard polish (Wave 10) — A1 owns this block.
+  { method: 'GET', path: '/dashboard/summary', handler: getDashboardSummary },
+  // End Dashboard polish (Wave 10).
   // TODO Wave 1+: per TS1/09-api/01-EDGE-FUNCTIONS-MAP.md §2.12
   //   GET    /dashboard/summary                       — KPI tiles per role
   //   GET    /dashboard/activity                      — recent activity feed
