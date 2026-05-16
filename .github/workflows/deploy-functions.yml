@@ -71,9 +71,12 @@ jobs:
             dashboard-api
             exports-api
             imports-api
+            # Wave 10 Session 2 — B2 (Phase 17 search-api)
+            search-api
+            # End Wave 10 Session 2 B2
           )
           for bundle in "${BUNDLES[@]}"; do
             echo "==> Deploying $bundle"
             supabase functions deploy "$bundle" --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
           done
-          echo "All 14 functions deployed."
+          echo "All ${#BUNDLES[@]} functions deployed."
