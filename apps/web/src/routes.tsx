@@ -5,6 +5,9 @@ import { ProtectedRoute } from './auth/ProtectedRoute';
 // Phase 22 vendor portal routing (Wave 10 Session 4) — C2 owns this block.
 import { VendorPortalRoute } from './auth/VendorPortalRoute';
 // End Phase 22 vendor portal routing (Wave 10 Session 4).
+// Phase 23 admin guard (Wave 10 Session 4) — C3 owns this block.
+import { AdminProtectedRoute } from './auth/AdminProtectedRoute';
+// End Phase 23 admin guard (Wave 10 Session 4).
 import { RequireFlag } from './components/shell/RequireFlag';
 
 const PlaceholderHome = lazy(() => import('./pages/PlaceholderHome'));
@@ -154,6 +157,18 @@ const VendorPortalStatementPage = lazy(
   () => import('./pages/vendor-portal/StatementPage'),
 );
 // End Phase 22 vendor portal pages (Wave 10 Session 4).
+
+// Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block.
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const AdminOrganizationsPage = lazy(() => import('./pages/admin/AdminOrganizationsPage'));
+const AdminOrganizationDetailPage = lazy(
+  () => import('./pages/admin/AdminOrganizationDetailPage'),
+);
+const AdminProvisionOrgPage = lazy(() => import('./pages/admin/AdminProvisionOrgPage'));
+const AdminImpersonationHistoryPage = lazy(
+  () => import('./pages/admin/AdminImpersonationHistoryPage'),
+);
+// End Phase 23 admin routes (Wave 10 Session 4).
 
 // Settings hub (Phase 15) — Phase15-FE owns this block.
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
@@ -791,6 +806,7 @@ export function AppRoutes() {
           }
         />
         {/* End Reports polish (Wave 10). */}
+
         {/* Phase 21 portal routing (Wave 10 Session 4) — C1 owns this block. */}
         <Route
           path="/portal"
@@ -924,6 +940,52 @@ export function AppRoutes() {
           }
         />
         {/* End Phase 22 vendor portal routes (Wave 10 Session 4). */}
+
+        {/* Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block. */}
+        {/* AdminShell handles its own layout (slate-themed, separate from AppShell)
+            + client-side platform-admin gate via useIsPlatformAdmin. We use
+            AdminProtectedRoute (auth-only, no AppShell wrap) here. */}
+        <Route
+          path="/admin"
+          element={
+            <AdminProtectedRoute>
+              <AdminDashboardPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations"
+          element={
+            <AdminProtectedRoute>
+              <AdminOrganizationsPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations/new"
+          element={
+            <AdminProtectedRoute>
+              <AdminProvisionOrgPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations/:id"
+          element={
+            <AdminProtectedRoute>
+              <AdminOrganizationDetailPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/impersonation-history"
+          element={
+            <AdminProtectedRoute>
+              <AdminImpersonationHistoryPage />
+            </AdminProtectedRoute>
+          }
+        />
+        {/* End Phase 23 admin routes (Wave 10 Session 4). */}
         <Route
           path="/feature-unavailable"
           element={
