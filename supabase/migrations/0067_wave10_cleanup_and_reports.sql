@@ -377,7 +377,7 @@ AS $$
     WHERE je.org_id        = p_org_id
       AND je.status        = 'posted'
       AND je.entry_date    <= p_as_of
-      AND je.currency_code = p_currency
+      AND je.currency_code = p_currency_code
       AND je.deleted_at    IS NULL
     GROUP BY jel.account_id
   )
@@ -443,7 +443,7 @@ AS $$
   JOIN public.expense_categories ec
     ON ec.id = e.category_id
   WHERE e.org_id        = p_org_id
-    AND e.currency_code = p_currency
+    AND e.currency_code = p_currency_code
     AND e.spent_at      BETWEEN p_period_start AND p_period_end
     AND e.status        IN ('approved','paid','reimbursed')
     AND e.deleted_at    IS NULL
