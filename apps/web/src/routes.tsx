@@ -51,6 +51,25 @@ const CreditNoteCreatePage = lazy(() => import('./pages/credit-notes/CreditNoteC
 const CreditNoteDetailPage = lazy(() => import('./pages/credit-notes/CreditNoteDetailPage'));
 // end payments + credit notes lazy.
 
+// Procurement (Wave 7 / Phase 10 — FE-A owns this block)
+const VendorListPage = lazy(() => import('./pages/vendors/VendorListPage'));
+const VendorDetailPage = lazy(() => import('./pages/vendors/VendorDetailPage'));
+const VendorFormPage = lazy(() => import('./pages/vendors/VendorFormPage'));
+const PurchaseOrderListPage = lazy(() => import('./pages/purchase-orders/PurchaseOrderListPage'));
+const PurchaseOrderDetailPage = lazy(() => import('./pages/purchase-orders/PurchaseOrderDetailPage'));
+const PurchaseOrderFormPage = lazy(() => import('./pages/purchase-orders/PurchaseOrderFormPage'));
+const VendorBillListPage = lazy(() => import('./pages/vendor-bills/VendorBillListPage'));
+const VendorBillDetailPage = lazy(() => import('./pages/vendor-bills/VendorBillDetailPage'));
+const VendorBillFormPage = lazy(() => import('./pages/vendor-bills/VendorBillFormPage'));
+// end procurement lazy.
+
+// Expenses (Wave 7 / Phase 11 — FE-A owns this block)
+const ExpenseListPage = lazy(() => import('./pages/expenses/ExpenseListPage'));
+const ExpenseDetailPage = lazy(() => import('./pages/expenses/ExpenseDetailPage'));
+const ExpenseFormPage = lazy(() => import('./pages/expenses/ExpenseFormPage'));
+const MyExpensesPage = lazy(() => import('./pages/expenses/MyExpensesPage'));
+// end expenses lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -289,6 +308,146 @@ export function AppRoutes() {
           }
         />
         {/* end payments + credit notes routes. */}
+        {/* Procurement (Wave 7 / Phase 10 — FE-A owns this block) */}
+        <Route
+          path="/vendors"
+          element={
+            <ProtectedRoute>
+              <VendorListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors/new"
+          element={
+            <ProtectedRoute>
+              <VendorFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors/:id"
+          element={
+            <ProtectedRoute>
+              <VendorDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors/:id/edit"
+          element={
+            <ProtectedRoute>
+              <VendorFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/purchase-orders"
+          element={
+            <ProtectedRoute>
+              <PurchaseOrderListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/purchase-orders/new"
+          element={
+            <ProtectedRoute>
+              <PurchaseOrderFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/purchase-orders/:id"
+          element={
+            <ProtectedRoute>
+              <PurchaseOrderDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/purchase-orders/:id/edit"
+          element={
+            <ProtectedRoute>
+              <PurchaseOrderFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor-bills"
+          element={
+            <ProtectedRoute>
+              <VendorBillListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor-bills/new"
+          element={
+            <ProtectedRoute>
+              <VendorBillFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor-bills/:id"
+          element={
+            <ProtectedRoute>
+              <VendorBillDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendor-bills/:id/edit"
+          element={
+            <ProtectedRoute>
+              <VendorBillFormPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end procurement routes. */}
+        {/* Expenses (Wave 7 / Phase 11 — FE-A owns this block) */}
+        <Route
+          path="/expenses"
+          element={
+            <ProtectedRoute>
+              <ExpenseListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses/new"
+          element={
+            <ProtectedRoute>
+              <ExpenseFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses/my"
+          element={
+            <ProtectedRoute>
+              <MyExpensesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses/:id"
+          element={
+            <ProtectedRoute>
+              <ExpenseDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/expenses/:id/edit"
+          element={
+            <ProtectedRoute>
+              <ExpenseFormPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end expenses routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"

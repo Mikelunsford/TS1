@@ -72,9 +72,32 @@ const items: NavItem[] = [
       { to: '/items/categories', label: 'Categories', icon: FolderTree },
     ],
   },
-  { to: '/procurement', label: 'Procurement', icon: Truck, disabled: true, wave: 4 },
-  { to: '/finance', label: 'Finance', icon: Wallet, disabled: true, wave: 6 },
-  { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 6 },
+  // Procurement (Wave 7 / Phase 10 — FE-A owns this block)
+  {
+    to: '/vendors',
+    label: 'Procurement',
+    icon: Truck,
+    requireCap: 'vendors.read',
+    children: [
+      { to: '/vendors', label: 'Vendors', icon: Truck },
+      { to: '/purchase-orders', label: 'Purchase orders', icon: ClipboardList },
+      { to: '/vendor-bills', label: 'Vendor bills', icon: Receipt },
+    ],
+  },
+  // end procurement nav.
+  // Expenses (Wave 7 / Phase 11 — FE-A owns this block)
+  {
+    to: '/expenses',
+    label: 'Expenses',
+    icon: Wallet,
+    requireCap: 'expenses.read',
+    children: [
+      { to: '/expenses', label: 'All expenses', icon: Wallet },
+      { to: '/expenses/my', label: 'My expenses', icon: Wallet },
+    ],
+  },
+  // end expenses nav.
+  { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 8 },
   {
     to: '/settings',
     label: 'Settings',
