@@ -13,19 +13,26 @@
 --      states are safe. Tries both () and (uuid) signatures because
 --      historical migrations created the helpers with no args while the
 --      spec references a (uuid) shape.
---   4. ar_aging(p_org_id uuid, p_as_of date, p_currency text) — open-AR
---      buckets per customer (current / 1-30 / 31-60 / 61-90 / 90+).
---   5. sales_by_customer(p_org_id uuid, p_start date, p_end date,
---      p_currency text) — invoice gross/tax/net per customer in range.
---   6. sales_by_item(p_org_id uuid, p_start date, p_end date,
---      p_currency text) — qty/gross/tax/net per pricing_menu item.
---   7. cash_position(p_org_id uuid, p_as_of date, p_currency text) —
---      asset-class balances as of date. Asset_subtype does not exist on
---      chart_of_accounts in prod, so we surface ALL assets and rely on
---      the consuming handler to interpret. Account_code prefix '10' is
---      the conventional cash/bank range; we keep that as a soft filter.
---   8. expense_by_category(p_org_id uuid, p_start date, p_end date,
---      p_currency text) — expense counts/totals per category in range.
+--   4. ar_aging(p_org_id, p_as_of, p_currency_code) — open-AR buckets
+--      per customer (current / 1-30 / 31-60 / 61-90 / 90+).
+--   5. sales_by_customer(p_org_id, p_period_start, p_period_end,
+--      p_currency_code) — invoice_count + subtotal/tax/total per customer
+--      in range (accounting: subtotal=pre-tax-post-discount, total=post-tax).
+--   6. sales_by_item(p_org_id, p_period_start, p_period_end,
+--      p_currency_code) — quantity + subtotal/total per pricing_menu
+--      item; includes item_code for SPA display. Ad-hoc lines
+--      (NULL item_id) are excluded by design.
+--   7. cash_position(p_org_id, p_as_of, p_currency_code) — asset-class
+--      balances as of date. account_subtype does not exist on
+--      chart_of_accounts in prod; cash_position surfaces account_type=asset
+--      with a soft account_code LIKE '10%' OR label heuristic.
+--   8. expense_by_category(p_org_id, p_period_start, p_period_end,
+--      p_currency_code) — expense counts/totals per category in range.
+--
+-- Parameter naming `p_currency_code` + `p_period_start/end` matches the
+-- Wave 8e convention (trial_balance/profit_loss/balance_sheet) and the
+-- Wave 10 A1 handlers (PR #79) that consume these RPCs by named-param
+-- dispatch — name mismatches would silently fail at runtime.
 --
 -- Constitutional alignment:
 --   - All 5 report RPCs SECURITY DEFINER, LANGUAGE sql STABLE,
@@ -162,7 +169,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.ar_aging(
   p_org_id   uuid,
   p_as_of    date,
-  p_currency text
+  p_currency_code text
 )
 RETURNS TABLE (
   customer_id         uuid,
@@ -186,7 +193,7 @@ AS $$
       (p_as_of - i.due_date)::int AS days_overdue
     FROM public.invoices i
     WHERE i.org_id        = p_org_id
-      AND i.currency_code = p_currency
+      AND i.currency_code = p_currency_code
       AND i.status        IN ('sent','partially_paid','overdue')
       AND i.balance_cents > 0
       AND i.deleted_at    IS NULL
@@ -208,13 +215,14 @@ $$;
 
 COMMENT ON FUNCTION public.ar_aging(uuid, date, text) IS
   'Wave 10 / Phase 18: open-AR aging buckets (current / 1-30 / 31-60 / 61-90 '
-  '/ 90+) per customer at p_as_of for invoices in p_currency. Source: '
+  '/ 90+) per customer at p_as_of for invoices in p_currency_code. Source: '
   'invoices with status IN (sent, partially_paid, overdue) and balance>0.';
 
 REVOKE EXECUTE ON FUNCTION public.ar_aging(uuid, date, text)
   FROM PUBLIC, anon, authenticated;
 GRANT  EXECUTE ON FUNCTION public.ar_aging(uuid, date, text)
   TO service_role;
+-- (signature unchanged by parameter rename — Postgres dispatches on types)
 
 -- 5. sales_by_customer ------------------------------------------------------
 --
@@ -224,18 +232,18 @@ GRANT  EXECUTE ON FUNCTION public.ar_aging(uuid, date, text)
 -- filter convention.
 
 CREATE OR REPLACE FUNCTION public.sales_by_customer(
-  p_org_id   uuid,
-  p_start    date,
-  p_end      date,
-  p_currency text
+  p_org_id        uuid,
+  p_period_start  date,
+  p_period_end    date,
+  p_currency_code text
 )
 RETURNS TABLE (
   customer_id    uuid,
   customer_name  text,
   invoice_count  int,
-  gross_cents    bigint,
+  subtotal_cents bigint,
   tax_cents      bigint,
-  net_cents      bigint
+  total_cents    bigint
 )
 LANGUAGE sql
 STABLE
@@ -243,17 +251,17 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
-    c.id                                                       AS customer_id,
-    c.display_name                                             AS customer_name,
-    COUNT(i.id)::int                                           AS invoice_count,
-    COALESCE(SUM(i.total_cents), 0)::bigint                    AS gross_cents,
-    COALESCE(SUM(i.tax_cents),   0)::bigint                    AS tax_cents,
-    COALESCE(SUM(i.subtotal_cents - i.discount_cents), 0)::bigint AS net_cents
+    c.id                                                          AS customer_id,
+    c.display_name                                                AS customer_name,
+    COUNT(i.id)::int                                              AS invoice_count,
+    COALESCE(SUM(i.subtotal_cents - i.discount_cents), 0)::bigint AS subtotal_cents,
+    COALESCE(SUM(i.tax_cents),   0)::bigint                       AS tax_cents,
+    COALESCE(SUM(i.total_cents), 0)::bigint                       AS total_cents
   FROM public.invoices i
   JOIN public.customers c ON c.id = i.customer_id
   WHERE i.org_id        = p_org_id
-    AND i.currency_code = p_currency
-    AND i.issue_date    BETWEEN p_start AND p_end
+    AND i.currency_code = p_currency_code
+    AND i.issue_date    BETWEEN p_period_start AND p_period_end
     AND i.status        NOT IN ('draft','cancelled')
     AND i.deleted_at    IS NULL
   GROUP BY c.id, c.display_name
@@ -261,9 +269,10 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.sales_by_customer(uuid, date, date, text) IS
-  'Wave 10 / Phase 18: per-customer invoice count + gross/tax/net cents for '
-  'issue_date in range. Excludes draft+cancelled. p_currency filters '
-  'invoices.currency_code.';
+  'Wave 10 / Phase 18: per-customer invoice_count + subtotal/tax/total '
+  'cents for issue_date in range. Excludes draft+cancelled. '
+  'subtotal=SUM(subtotal-discount); total=SUM(total). '
+  'p_currency_code filters invoices.currency_code.';
 
 REVOKE EXECUTE ON FUNCTION public.sales_by_customer(uuid, date, date, text)
   FROM PUBLIC, anon, authenticated;
@@ -278,18 +287,18 @@ GRANT  EXECUTE ON FUNCTION public.sales_by_customer(uuid, date, date, text)
 -- net = line_total; tax = tax_amount.
 
 CREATE OR REPLACE FUNCTION public.sales_by_item(
-  p_org_id   uuid,
-  p_start    date,
-  p_end      date,
-  p_currency text
+  p_org_id        uuid,
+  p_period_start  date,
+  p_period_end    date,
+  p_currency_code text
 )
 RETURNS TABLE (
   item_id        uuid,
+  item_code      text,
   item_name      text,
-  quantity_sold  numeric,
-  gross_cents    bigint,
-  tax_cents      bigint,
-  net_cents      bigint
+  quantity       numeric,
+  subtotal_cents bigint,
+  total_cents    bigint
 )
 LANGUAGE sql
 STABLE
@@ -297,32 +306,34 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT
-    pm.id                                                     AS item_id,
-    pm.description                                            AS item_name,
-    COALESCE(SUM(ili.quantity), 0)::numeric                   AS quantity_sold,
-    COALESCE(SUM(ili.line_total_cents + ili.tax_amount_cents), 0)::bigint AS gross_cents,
-    COALESCE(SUM(ili.tax_amount_cents), 0)::bigint            AS tax_cents,
-    COALESCE(SUM(ili.line_total_cents), 0)::bigint            AS net_cents
+    pm.id                                                                 AS item_id,
+    pm.item_code                                                          AS item_code,
+    pm.description                                                        AS item_name,
+    COALESCE(SUM(ili.quantity), 0)::numeric                               AS quantity,
+    COALESCE(SUM(ili.line_total_cents), 0)::bigint                        AS subtotal_cents,
+    COALESCE(SUM(ili.line_total_cents + ili.tax_amount_cents), 0)::bigint AS total_cents
   FROM public.invoice_line_items ili
   JOIN public.invoices i
     ON i.id = ili.invoice_id
   JOIN public.pricing_menu pm
     ON pm.id = ili.item_id
   WHERE i.org_id        = p_org_id
-    AND i.currency_code = p_currency
-    AND i.issue_date    BETWEEN p_start AND p_end
+    AND i.currency_code = p_currency_code
+    AND i.issue_date    BETWEEN p_period_start AND p_period_end
     AND i.status        NOT IN ('draft','cancelled')
     AND i.deleted_at    IS NULL
     AND ili.item_id     IS NOT NULL
-  GROUP BY pm.id, pm.description
+  GROUP BY pm.id, pm.item_code, pm.description
   ORDER BY pm.description, pm.id;
 $$;
 
 COMMENT ON FUNCTION public.sales_by_item(uuid, date, date, text) IS
-  'Wave 10 / Phase 18: per-pricing_menu-item quantity + gross/tax/net for '
+  'Wave 10 / Phase 18: per-pricing_menu-item quantity + subtotal/total for '
   'invoice_line_items whose parent invoice issue_date is in range, status '
-  'NOT IN (draft,cancelled), currency_code = p_currency. Lines with NULL '
-  'item_id (ad-hoc lines) are excluded — they cannot be attributed.';
+  'NOT IN (draft,cancelled), currency_code = p_currency_code. '
+  'subtotal=SUM(line_total); total=SUM(line_total+tax_amount). '
+  'item_code included for SPA display. Lines with NULL item_id (ad-hoc '
+  'lines) are excluded — they cannot be attributed.';
 
 REVOKE EXECUTE ON FUNCTION public.sales_by_item(uuid, date, date, text)
   FROM PUBLIC, anon, authenticated;
@@ -342,7 +353,7 @@ GRANT  EXECUTE ON FUNCTION public.sales_by_item(uuid, date, date, text)
 CREATE OR REPLACE FUNCTION public.cash_position(
   p_org_id   uuid,
   p_as_of    date,
-  p_currency text
+  p_currency_code text
 )
 RETURNS TABLE (
   account_id     uuid,
@@ -407,10 +418,10 @@ GRANT  EXECUTE ON FUNCTION public.cash_position(uuid, date, text)
 -- Lines with NULL category_id are excluded (cannot attribute).
 
 CREATE OR REPLACE FUNCTION public.expense_by_category(
-  p_org_id   uuid,
-  p_start    date,
-  p_end      date,
-  p_currency text
+  p_org_id        uuid,
+  p_period_start  date,
+  p_period_end    date,
+  p_currency_code text
 )
 RETURNS TABLE (
   category_id    uuid,
@@ -433,7 +444,7 @@ AS $$
     ON ec.id = e.category_id
   WHERE e.org_id        = p_org_id
     AND e.currency_code = p_currency
-    AND e.spent_at      BETWEEN p_start AND p_end
+    AND e.spent_at      BETWEEN p_period_start AND p_period_end
     AND e.status        IN ('approved','paid','reimbursed')
     AND e.deleted_at    IS NULL
   GROUP BY ec.id, ec.label
@@ -443,7 +454,7 @@ $$;
 COMMENT ON FUNCTION public.expense_by_category(uuid, date, date, text) IS
   'Wave 10 / Phase 18: per-category expense count + total_cents for '
   'expenses.spent_at in range, status IN (approved,paid,reimbursed), '
-  'currency_code = p_currency. NULL-category expenses are excluded.';
+  'currency_code = p_currency_code. NULL-category expenses are excluded.';
 
 REVOKE EXECUTE ON FUNCTION public.expense_by_category(uuid, date, date, text)
   FROM PUBLIC, anon, authenticated;
