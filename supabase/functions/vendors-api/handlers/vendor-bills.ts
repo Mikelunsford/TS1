@@ -24,6 +24,7 @@ import {
   requireCap,
   respondWithIdempotency,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 import {
   VendorBillCreateSchema,
   VendorBillPatchSchema,
@@ -74,19 +75,21 @@ export async function createVendorBill({ req }: Ctx): Promise<Response> {
   const body = await parseBody(req, VendorBillCreateSchema);
 
   return respondWithIdempotency(req, caller, BUNDLE, 'POST /vendor-bills', body, async () => {
-    const { data: numData, error: numErr } = await admin().rpc('next_doc_number', {
-      p_org_id: caller.orgId,
-      p_doc_type: 'vendor_bill',
-    });
-    if (numErr || !numData) {
-      throw new ApiError('INTERNAL_ERROR', 'next_doc_number vendor_bill failed', 500, { db: numErr?.message });
+    let billNumber: string;
+    try {
+      billNumber = await getNextDocNumber(admin(), caller.orgId, 'vendor_bill');
+    } catch (e) {
+      if (e instanceof NumberingError) {
+        throw new ApiError('INTERNAL_ERROR', 'next_doc_number vendor_bill failed', 500, { db: e.message });
+      }
+      throw e;
     }
 
     const { data, error } = await admin()
       .from('vendor_bills')
       .insert({
         org_id: caller.orgId,
-        bill_number: numData as string,
+        bill_number: billNumber,
         vendor_id: body.vendor_id,
         po_id: body.po_id ?? null,
         vendor_ref: body.vendor_ref ?? null,

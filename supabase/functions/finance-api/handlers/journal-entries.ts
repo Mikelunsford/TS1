@@ -55,6 +55,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const JE_COLS =
   'id, org_id, entry_number, entry_date, description, status, source_type, ' +
@@ -145,16 +146,16 @@ async function fetchJeLines(caller: Caller, entryId: string): Promise<JelRow[]> 
 }
 
 async function nextJournalEntryNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'journal_entry',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number journal_entry failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'journal_entry');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number journal_entry failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 function buildLineInserts(

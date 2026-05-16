@@ -43,6 +43,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const PROJECT_COLS =
   'id, org_id, project_number, quote_id, customer_id, customer_name, name, status, ' +
@@ -99,16 +100,16 @@ async function fetchProjectRow(caller: Caller, id: string): Promise<ProjectRow> 
 }
 
 async function nextProjectNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'project',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number project failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'project');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number project failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 function workflowToApiError(e: unknown): never {

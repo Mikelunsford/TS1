@@ -25,6 +25,7 @@ import {
   requireCap,
   respondWithIdempotency,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 import {
   POLineItemCreateSchema,
   POLineItemPatchSchema,
@@ -89,14 +90,15 @@ export async function createPurchaseOrder({ req }: Ctx): Promise<Response> {
   const body = await parseBody(req, PurchaseOrderCreateSchema);
 
   return respondWithIdempotency(req, caller, BUNDLE, 'POST /purchase-orders', body, async () => {
-    const { data: numData, error: numErr } = await admin().rpc('next_doc_number', {
-      p_org_id: caller.orgId,
-      p_doc_type: 'purchase_order',
-    });
-    if (numErr || !numData) {
-      throw new ApiError('INTERNAL_ERROR', 'next_doc_number purchase_order failed', 500, { db: numErr?.message });
+    let poNumber: string;
+    try {
+      poNumber = await getNextDocNumber(admin(), caller.orgId, 'purchase_order');
+    } catch (e) {
+      if (e instanceof NumberingError) {
+        throw new ApiError('INTERNAL_ERROR', 'next_doc_number purchase_order failed', 500, { db: e.message });
+      }
+      throw e;
     }
-    const poNumber = numData as string;
 
     const { data: po, error: poErr } = await admin()
       .from('purchase_orders')

@@ -66,6 +66,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const QUOTE_COLS =
   'id, org_id, quote_number, customer_id, customer_name, contact_name, contact_email, ' +
@@ -152,16 +153,16 @@ async function fetchQuoteRow(caller: Caller, id: string): Promise<QuoteRow> {
 }
 
 async function nextQuoteNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'quote',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number quote failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'quote');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number quote failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 async function ensureCustomerInOrg(caller: Caller, customerId: string): Promise<string> {
