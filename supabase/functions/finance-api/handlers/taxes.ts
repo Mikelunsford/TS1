@@ -12,10 +12,12 @@
  * contract §7 originally proposed `rate_bp`; we expose `rate` on the wire
  * to match the DB. Documented in the Zod schema and in the dispatch brief.
  *
- * `is_default` shuffle: when setting a row to `is_default=true`, first
- * un-default the prior default in the same org. Supabase JS has no
- * transaction primitive, so we do two sequential UPDATEs and attempt
- * best-effort rollback if the second fails (see crm-api LeadConvert R-W2-04).
+ * `is_default` shuffle (Wave 6 / F-Wave6-01 / closes R-W3-05 fully):
+ * routes the `is_default=true` branch through the atomic
+ * `set_default_tax(p_org_id, p_tax_id)` SECURITY DEFINER RPC shipped in
+ * migration 0051. The RPC clears any prior default + stamps the new one
+ * inside a single transaction; eliminates the two-step UPDATE race that
+ * the prior best-effort-rollback pattern compensated for.
  */
 
 import type { Ctx } from '../../_shared/route.ts';
@@ -125,12 +127,10 @@ export async function createTax({ req }: Ctx): Promise<Response> {
       'POST /taxes',
       body,
       async () => {
-        // If this row will be the new default, un-default the prior first.
-        let priorDefaultId: string | null = null;
-        if (body.is_default) {
-          priorDefaultId = await unsetPriorDefault(caller, null);
-        }
-
+        // Always insert with is_default=false; if body.is_default=true, the
+        // post-insert RPC atomically clears any prior default and flips this
+        // row to default. Avoids the partial-unique-on-is_default race that
+        // the prior unsetPriorDefault/restoreDefault pattern compensated for.
         const insertRow = {
           org_id: caller.orgId,
           code: body.code,
@@ -139,7 +139,7 @@ export async function createTax({ req }: Ctx): Promise<Response> {
           jurisdiction: body.jurisdiction ?? null,
           is_compound: body.is_compound,
           is_inclusive: body.is_inclusive,
-          is_default: body.is_default,
+          is_default: false,
           is_active: body.is_active,
           created_by: caller.userId,
           updated_by: caller.userId,
@@ -150,8 +150,6 @@ export async function createTax({ req }: Ctx): Promise<Response> {
           .select(TAX_COLS)
           .single();
         if (error || !data) {
-          // Best-effort rollback of the un-default step.
-          if (priorDefaultId) await restoreDefault(caller, priorDefaultId);
           if (error?.code === '23505') {
             throw new ApiError('STATE_CONFLICT', 'tax code already exists in this org', 409);
           }
@@ -159,7 +157,12 @@ export async function createTax({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToTax(data as TaxRow) } };
+
+        let row = data as TaxRow;
+        if (body.is_default) {
+          row = await callSetDefaultTax(caller, row.id);
+        }
+        return { status: 201, body: { data: rowToTax(row) } };
       },
     );
   } catch (e) {
@@ -184,11 +187,8 @@ export async function patchTax({ req, params }: Ctx): Promise<Response> {
       async () => {
         await fetchTaxRow(caller, id);
 
-        let priorDefaultId: string | null = null;
-        if (body.is_default === true) {
-          priorDefaultId = await unsetPriorDefault(caller, id);
-        }
-
+        // Build the patch excluding is_default — the RPC handles that branch
+        // atomically below. is_default=false flips directly (no shuffle).
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.code !== undefined) patch.code = body.code;
         if (body.label !== undefined) patch.label = body.label;
@@ -196,7 +196,7 @@ export async function patchTax({ req, params }: Ctx): Promise<Response> {
         if (body.jurisdiction !== undefined) patch.jurisdiction = body.jurisdiction;
         if (body.is_compound !== undefined) patch.is_compound = body.is_compound;
         if (body.is_inclusive !== undefined) patch.is_inclusive = body.is_inclusive;
-        if (body.is_default !== undefined) patch.is_default = body.is_default;
+        if (body.is_default === false) patch.is_default = false;
         if (body.is_active !== undefined) patch.is_active = body.is_active;
 
         const { data, error } = await admin()
@@ -207,7 +207,6 @@ export async function patchTax({ req, params }: Ctx): Promise<Response> {
           .select(TAX_COLS)
           .single();
         if (error || !data) {
-          if (priorDefaultId) await restoreDefault(caller, priorDefaultId);
           if (error?.code === '23505') {
             throw new ApiError('STATE_CONFLICT', 'tax code already exists in this org', 409);
           }
@@ -215,7 +214,12 @@ export async function patchTax({ req, params }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToTax(data as TaxRow) } };
+
+        let row = data as TaxRow;
+        if (body.is_default === true) {
+          row = await callSetDefaultTax(caller, id);
+        }
+        return { status: 200, body: { data: rowToTax(row) } };
       },
     );
   } catch (e) {
@@ -278,43 +282,30 @@ async function fetchTaxRow(caller: Caller, id: string): Promise<TaxRow> {
 }
 
 /**
- * Clear the current default tax for the caller's org (except `excludeId`
- * if provided). Returns the id of the row that was un-defaulted so the
- * caller can roll back on subsequent failure.
+ * Calls `set_default_tax(p_org_id, p_tax_id)` SECURITY DEFINER RPC (migration
+ * 0051). Atomically clears any prior default in the org and stamps the named
+ * row as `is_default=true`. Returns the post-RPC row for response shaping.
  */
-async function unsetPriorDefault(caller: Caller, excludeId: string | null): Promise<string | null> {
-  let query = admin()
+async function callSetDefaultTax(caller: Caller, taxId: string): Promise<TaxRow> {
+  const { error: rpcErr } = await admin().rpc('set_default_tax', {
+    p_org_id: caller.orgId,
+    p_tax_id: taxId,
+  });
+  if (rpcErr) {
+    throw new ApiError('INTERNAL_ERROR', 'set_default_tax RPC failed', 500, {
+      detail: rpcErr.message,
+    });
+  }
+  const { data, error } = await admin()
     .from('taxes')
-    .select('id')
+    .select(TAX_COLS)
+    .eq('id', taxId)
     .eq('org_id', caller.orgId)
-    .eq('is_default', true);
-  if (excludeId) query = query.neq('id', excludeId);
-  const { data, error } = await query.maybeSingle();
-  if (error) {
-    throw new ApiError('INTERNAL_ERROR', 'default tax lookup failed', 500, {
-      detail: error.message,
+    .single();
+  if (error || !data) {
+    throw new ApiError('INTERNAL_ERROR', 'tax re-fetch after RPC failed', 500, {
+      detail: error?.message,
     });
   }
-  if (!data) return null;
-  const priorId = (data as { id: string }).id;
-  const { error: updErr } = await admin()
-    .from('taxes')
-    .update({ is_default: false, updated_by: caller.userId })
-    .eq('id', priorId)
-    .eq('org_id', caller.orgId);
-  if (updErr) {
-    throw new ApiError('INTERNAL_ERROR', 'failed to clear prior default tax', 500, {
-      detail: updErr.message,
-    });
-  }
-  return priorId;
-}
-
-async function restoreDefault(caller: Caller, id: string): Promise<void> {
-  // Best-effort: ignore errors here — the caller is already throwing.
-  await admin()
-    .from('taxes')
-    .update({ is_default: true, updated_by: caller.userId })
-    .eq('id', id)
-    .eq('org_id', caller.orgId);
+  return data as TaxRow;
 }
