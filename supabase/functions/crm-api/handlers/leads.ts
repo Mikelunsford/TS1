@@ -250,22 +250,17 @@ export async function patchLead({ req, params }: Ctx): Promise<Response> {
 
 // ======================================================= POST /leads/:id/convert
 /**
- * Transactional convert flow. Order:
- *   1. (optional) create customer from lead fields,
- *   2. create opportunity (lead_id set),
- *   3. patch lead with converted_customer_id, converted_opportunity_id,
+ * Atomic convert flow via the convert_lead(...) SECURITY DEFINER RPC
+ * (migration 0055 / F-Wave6-02). The RPC, inside a single transaction:
+ *   1. (optional) creates a customer from lead fields,
+ *   2. allocates opportunity_number via next_doc_number(org, 'opportunity'),
+ *   3. inserts the opportunity in stage='prospect',
+ *   4. stamps the lead with converted_customer_id, converted_opportunity_id,
  *      converted_at, status='converted'.
  *
- * The opportunities.lead_id FK is NOT deferrable (always insert opportunity
- * AFTER lead exists), but the lead.converted_opportunity_id FK IS DEFERRABLE
- * INITIALLY DEFERRED (migration 0047), allowing the update to reference an
- * opportunity row that exists by commit time.
- *
- * Because the Supabase JS client doesn't expose a transaction primitive, we
- * sequence inserts with explicit org_id scoping and accept best-effort
- * rollback by deleting the partially-created rows on failure. A future
- * iteration may wrap this in a SQL RPC for true ACID semantics; the
- * idempotency cache provides retry safety in the meantime.
+ * Uses the DEFERRABLE fk_leads_opportunity FK from 0047 to allow the cyclic
+ * reference. Replaces the prior best-effort-rollback pattern. Closes R-W2-04
+ * / F-Wave4-04.
  */
 export async function convertLead({ req, params }: Ctx): Promise<Response> {
   try {
@@ -280,106 +275,56 @@ export async function convertLead({ req, params }: Ctx): Promise<Response> {
       'POST /leads/:id/convert',
       body,
       async () => {
-        const lead = await fetchLeadRow(caller, id);
-        if (lead.status === 'converted') {
-          throw new ApiError('LEAD_ALREADY_CONVERTED', 'lead already converted', 409);
-        }
+        const { data: rpcData, error: rpcErr } = await admin().rpc('convert_lead', {
+          p_lead_id: id,
+          p_opportunity_name: body.opportunity_name,
+          p_opportunity_amount_cents: body.opportunity_amount_cents,
+          p_opportunity_currency_code: body.opportunity_currency_code ?? null,
+          p_customer_id: body.customer_id ?? null,
+          p_create_customer: body.create_customer,
+          p_actor_user_id: caller.userId,
+        });
 
-        let customerId = body.customer_id ?? null;
-        let createdCustomerId: string | null = null;
-
-        if (body.create_customer) {
-          const { data: c, error: cErr } = await admin()
-            .from('customers')
-            .insert({
-              org_id: caller.orgId,
-              display_name: lead.company_name ?? lead.display_name,
-              client_type: 'company',
-              client_status: 'active',
-              email: lead.email,
-              phone: lead.phone,
-              currency_code: lead.currency_code,
-              created_by: caller.userId,
-              updated_by: caller.userId,
-            })
-            .select('id')
-            .single();
-          if (cErr || !c) {
-            throw new ApiError('INTERNAL_ERROR', 'customer create failed during convert', 500, {
-              detail: cErr?.message,
-            });
+        if (rpcErr) {
+          const msg = rpcErr.message ?? '';
+          if (/already converted/i.test(msg)) {
+            throw new ApiError('LEAD_ALREADY_CONVERTED', 'lead already converted', 409);
           }
-          customerId = c.id as string;
-          createdCustomerId = c.id as string;
-        }
-        if (!customerId) {
-          throw new ApiError(
-            'VALIDATION_ERROR',
-            'customer_id required when create_customer is false',
-            422,
-          );
-        }
-
-        // 2. Create opportunity.
-        const oppNumber = await nextOpportunityNumber(caller.orgId);
-        const { data: opp, error: oErr } = await admin()
-          .from('opportunities')
-          .insert({
-            org_id: caller.orgId,
-            opportunity_number: oppNumber,
-            customer_id: customerId,
-            lead_id: id,
-            name: body.opportunity_name,
-            stage: 'prospect',
-            amount_cents: body.opportunity_amount_cents,
-            currency_code: body.opportunity_currency_code ?? lead.currency_code,
-            owner_user_id: lead.assigned_to,
-            created_by: caller.userId,
-            updated_by: caller.userId,
-          })
-          .select('id')
-          .single();
-        if (oErr || !opp) {
-          // Best-effort rollback of the customer we just created.
-          if (createdCustomerId) {
-            await admin().from('customers').delete().eq('id', createdCustomerId);
+          if (/lead .* not found/i.test(msg)) {
+            throw new ApiError('NOT_FOUND', 'lead not found', 404);
           }
-          throw new ApiError('INTERNAL_ERROR', 'opportunity insert failed', 500, {
-            detail: oErr?.message,
+          if (/customer_id required/i.test(msg)) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              'customer_id required when create_customer is false',
+              422,
+            );
+          }
+          throw new ApiError('INTERNAL_ERROR', 'convert_lead RPC failed', 500, {
+            detail: msg,
           });
         }
 
-        // 3. Patch the lead. DEFERRABLE FK lets us write converted_opportunity_id.
-        const { data: updated, error: uErr } = await admin()
-          .from('leads')
-          .update({
-            converted_customer_id: customerId,
-            converted_opportunity_id: opp.id,
-            converted_at: new Date().toISOString(),
-            status: 'converted',
-            updated_by: caller.userId,
-          })
-          .eq('id', id)
-          .eq('org_id', caller.orgId)
-          .select(LEAD_COLS)
-          .single();
-        if (uErr || !updated) {
-          if (createdCustomerId) {
-            await admin().from('customers').delete().eq('id', createdCustomerId);
-          }
-          await admin().from('opportunities').delete().eq('id', opp.id);
-          throw new ApiError('INTERNAL_ERROR', 'lead update after convert failed', 500, {
-            detail: uErr?.message,
-          });
+        const result = rpcData as {
+          lead_id: string;
+          customer_id: string;
+          opportunity_id: string;
+          opportunity_number: string;
+        } | null;
+        if (!result) {
+          throw new ApiError('INTERNAL_ERROR', 'convert_lead RPC returned no data', 500);
         }
+
+        // Re-fetch lead for response shape parity with prior handler.
+        const updated = await fetchLeadRow(caller, id);
 
         return {
           status: 200,
           body: {
             data: {
-              lead: rowToLead(updated as LeadRow),
-              customer_id: customerId,
-              opportunity_id: opp.id,
+              lead: rowToLead(updated),
+              customer_id: result.customer_id,
+              opportunity_id: result.opportunity_id,
             },
           },
         };
@@ -419,15 +364,6 @@ async function nextLeadNumber(orgId: string): Promise<string> {
   return data;
 }
 
-async function nextOpportunityNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'opportunity',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number opportunity failed', 500, {
-      detail: error?.message,
-    });
-  }
-  return data;
-}
+// nextOpportunityNumber removed by Wave 6 / F-Wave6-02 — the convert_lead
+// SECURITY DEFINER RPC (migration 0055) now allocates opportunity numbers
+// internally via public.next_doc_number(org, 'opportunity').
