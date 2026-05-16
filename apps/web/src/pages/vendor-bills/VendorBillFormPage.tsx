@@ -6,11 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { VendorBillForm } from '@/components/procurement/VendorBillForm';
 import {
-  VendorBillForm,
   emptyVendorBillForm,
   fromVendorBill,
-} from '@/components/procurement/VendorBillForm';
+} from '@/components/procurement/vendorBillFormHelpers';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { vendorBillKeys } from '@/lib/queryKeys/vendorBills';

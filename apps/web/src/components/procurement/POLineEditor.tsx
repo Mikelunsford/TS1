@@ -37,7 +37,6 @@ import { toast } from 'sonner';
 
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { MoneyInput } from '@/components/ui/MoneyInput';
-import { roundHalfEven } from '@/lib/money';
 import { poLineItemKeys } from '@/lib/queryKeys/poLineItems';
 import { purchaseOrderKeys } from '@/lib/queryKeys/purchaseOrders';
 import {
@@ -47,13 +46,10 @@ import {
 } from '@/lib/services/poLineItemsService';
 import type { POLineItem, POLineItemCreate, POLineItemPatch } from '@/lib/types';
 
+import { previewLineTotal } from './poLineMath';
+
 function asNumber(v: number | string): number {
   return typeof v === 'number' ? v : Number(v);
-}
-
-/** Local preview matching the BE invariant. */
-export function previewLineTotal(quantity: number, unitCostCents: number): number {
-  return roundHalfEven(quantity * unitCostCents);
 }
 
 interface Props {

@@ -11,56 +11,11 @@ import { toast } from 'sonner';
 import { ExpenseCategoryPicker } from '@/components/expenses/ExpenseCategoryPicker';
 import { ReceiptUploader } from '@/components/expenses/ReceiptUploader';
 import { MoneyInput } from '@/components/ui/MoneyInput';
-import { ExpenseCreateSchema, type Expense, type ExpenseCreate } from '@/lib/types';
+import { ExpenseCreateSchema, type ExpenseCreate } from '@/lib/types';
+
+import { emptyExpenseForm, type ExpenseFormState } from './expenseFormHelpers';
 
 type FieldErrors = Partial<Record<keyof ExpenseCreate, string[] | undefined>>;
-
-export interface ExpenseFormState {
-  category_id: string;
-  vendor_id: string;
-  project_id: string;
-  spent_at: string;
-  description: string;
-  currency_code: string;
-  amount_cents: number;
-  tax_cents: number;
-  receipt_url: string;
-  notes: string;
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-export function emptyExpenseForm(): ExpenseFormState {
-  return {
-    category_id: '',
-    vendor_id: '',
-    project_id: '',
-    spent_at: todayIso(),
-    description: '',
-    currency_code: 'USD',
-    amount_cents: 0,
-    tax_cents: 0,
-    receipt_url: '',
-    notes: '',
-  };
-}
-
-export function fromExpense(e: Expense): ExpenseFormState {
-  return {
-    category_id: e.category_id ?? '',
-    vendor_id: e.vendor_id ?? '',
-    project_id: e.project_id ?? '',
-    spent_at: e.spent_at,
-    description: e.description ?? '',
-    currency_code: e.currency_code,
-    amount_cents: Number(e.amount_cents),
-    tax_cents: Number(e.tax_cents),
-    receipt_url: e.receipt_url ?? '',
-    notes: e.notes ?? '',
-  };
-}
 
 interface Props {
   initial?: ExpenseFormState;

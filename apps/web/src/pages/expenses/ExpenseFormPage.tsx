@@ -6,11 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { ExpenseForm } from '@/components/expenses/ExpenseForm';
 import {
-  ExpenseForm,
   emptyExpenseForm,
   fromExpense,
-} from '@/components/expenses/ExpenseForm';
+} from '@/components/expenses/expenseFormHelpers';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { expenseKeys } from '@/lib/queryKeys/expenses';

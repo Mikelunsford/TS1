@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { previewLineTotal } from '../POLineEditor';
+import { previewLineTotal } from '../poLineMath';
 
 describe('previewLineTotal', () => {
   it('rounds half-even on a .5 boundary that rounds to even', () => {
