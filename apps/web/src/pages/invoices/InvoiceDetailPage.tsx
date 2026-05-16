@@ -14,6 +14,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { SourceJETimeline } from '@/components/finance/SourceJETimeline';
+// Phase 17 AuditTimeline demo wiring (Wave 10 Session 2) — B2 owns this block.
+import { AuditTimeline } from '@/components/shell/AuditTimeline';
+// End Phase 17 AuditTimeline
 import { ConvertFromProjectDialog } from '@/components/invoices/ConvertFromProjectDialog';
 import { ConvertFromQuoteDialog } from '@/components/invoices/ConvertFromQuoteDialog';
 import { InvoiceLineEditor } from '@/components/invoices/InvoiceLineEditor';
@@ -304,9 +307,9 @@ export default function InvoiceDetailPage() {
           {tab === 'versions' && <VersionsTab invoiceId={invoice.id} currency={invoice.currency_code} />}
 
           {tab === 'history' && (
-            <section className="rounded-md border border-border bg-bg p-4 text-sm text-fg-muted">
-              {/* TODO(Phase 17): wire audit_log surfacing here. */}
-              History will surface audit_log entries in Phase 17.
+            <section className="rounded-md border border-border bg-bg p-4">
+              {/* Phase 17 AuditTimeline (Wave 10 Session 2) — B2 demo wiring. */}
+              <AuditTimeline entityType="invoice" entityId={invoice.id} />
             </section>
           )}
         </>

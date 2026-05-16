@@ -8,6 +8,9 @@ import { useSwitchOrg } from '@/lib/hooks/useSwitchOrg';
 // Phase 16 (Wave 10 Session 2) — B1 owns this block.
 import { NotificationBell } from '@/components/collaboration/NotificationBell';
 // End Phase 16 (Wave 10 Session 2).
+// Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block.
+import { GlobalSearchBar } from './GlobalSearchBar';
+// End Phase 17 GlobalSearchBar
 
 /**
  * Topbar — the app's persistent top chrome.
@@ -49,6 +52,12 @@ export function Topbar() {
         />
         <span>{appName}</span>
       </div>
+
+      {/* Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block. */}
+      <div className="mx-4 flex-1 max-w-md">
+        <GlobalSearchBar />
+      </div>
+      {/* End Phase 17 GlobalSearchBar */}
 
       <div className="flex items-center gap-3">
         {/* Workspace switcher */}
