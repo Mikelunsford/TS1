@@ -64,7 +64,7 @@ export default function SalesByItemReportPage() {
             Invoiced line items grouped by item within the selected date range.
           </p>
         </div>
-        <ReportExportButton reportKey="sales-by-item" />
+        <ReportExportButton reportKey="sales-by-item" params={{ start: range.start, end: range.end, currency }} />
       </header>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-muted/30 px-3 py-2">

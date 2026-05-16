@@ -62,7 +62,7 @@ export default function ExpenseByCategoryReportPage() {
             Approved/paid expenses grouped by category within the selected date range.
           </p>
         </div>
-        <ReportExportButton reportKey="expense-by-category" />
+        <ReportExportButton reportKey="expense-by-category" params={{ start: range.start, end: range.end, currency }} />
       </header>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-muted/30 px-3 py-2">

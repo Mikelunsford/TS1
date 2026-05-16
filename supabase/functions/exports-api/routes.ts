@@ -52,6 +52,15 @@ import {
   exportReceivingOrders,
   exportShipments,
 } from './handlers/misc.ts';
+// Phase 19 (Wave 10 Session 3) — owns this block.
+import {
+  exportArAging,
+  exportCashPosition,
+  exportExpenseByCategory,
+  exportSalesByCustomer,
+  exportSalesByItem,
+} from './handlers/reports.ts';
+// End Phase 19 (Wave 10 Session 3).
 
 const BUNDLE = 'exports-api';
 
@@ -86,4 +95,12 @@ export const routes: Route[] = [
   { method: 'GET', path: '/exports/receiving_orders', handler: exportReceivingOrders },
   { method: 'GET', path: '/exports/production_runs', handler: exportProductionRuns },
   { method: 'GET', path: '/exports/shipments', handler: exportShipments },
+
+  // Phase 19 (Wave 10 Session 3) — report CSV exports (R-W10-RPT-01).
+  { method: 'GET', path: '/exports/reports/ar-aging',            handler: exportArAging },
+  { method: 'GET', path: '/exports/reports/sales-by-customer',   handler: exportSalesByCustomer },
+  { method: 'GET', path: '/exports/reports/sales-by-item',       handler: exportSalesByItem },
+  { method: 'GET', path: '/exports/reports/cash-position',       handler: exportCashPosition },
+  { method: 'GET', path: '/exports/reports/expense-by-category', handler: exportExpenseByCategory },
+  // End Phase 19 (Wave 10 Session 3).
 ];

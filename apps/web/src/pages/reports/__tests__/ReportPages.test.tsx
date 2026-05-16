@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 describe('ArAgingReportPage', () => {
-  it('renders rows + totals + disables CSV export under the off-flag', async () => {
+  it('renders rows + totals + shows enabled CSV export button (Phase 19 wired)', async () => {
     arAgingMock.mockResolvedValue({
       as_of: '2026-05-16',
       currency: 'USD',
@@ -102,7 +102,9 @@ describe('ArAgingReportPage', () => {
     await waitFor(() => expect(screen.getByTestId('ar-aging-row-0')).toBeInTheDocument());
     expect(screen.getByText('Acme')).toBeInTheDocument();
     expect(screen.getByTestId('ar-aging-row-total')).toBeInTheDocument();
-    expect(screen.getByTestId('report-export-ar-aging')).toBeDisabled();
+    // Phase 19 (Wave 10 Session 3): R-W10-RPT-01 wires real CSV export.
+    // The button is now always-on once a known reportKey is provided.
+    expect(screen.getByTestId('report-export-ar-aging')).toBeEnabled();
   });
 
   it('refetches when the as-of date changes', async () => {

@@ -2,10 +2,17 @@
  * NotificationBell — header dropdown for in-app notifications.
  *
  * Phase 16 (Wave 10 Session 2) — B1 owns this block.
+ * Phase 19 (Wave 10 Session 3) — R-W10-S2-B1-OBS-04 close-out: upgrades
+ * the 30s polling to a Supabase realtime channel subscription on
+ * notifications. Initial fetch via TanStack Query still loads the first
+ * page; realtime INSERT events invalidate the cache. Falls back to 60s
+ * polling if the realtime channel fails to connect within 5s.
  *
- * Polls collaboration-api every 30s. Shows the unread count as a badge,
- * the last 20 notifications in a dropdown, and a "Mark all read" action.
- * Click on an item navigates to the related entity.
+ * Note: prod realtime is enabled at the Supabase cloud project level
+ * (verified by orchestrator on project ozvanymuzaqbexchuoxz); the local
+ * stack's [realtime] block in supabase/config.toml stays the way the
+ * Wave 0 config set it because flipping it locally has no effect on
+ * cloud and the test runner uses MSW mocks anyway.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
@@ -14,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useOrgFlags } from '@/lib/hooks/useOrgFlags';
 import { collaborationKeys } from '@/lib/queryKeys/collaboration';
+import { supabase } from '@/lib/supabase';
 import {
   listNotifications,
   markAllNotificationsRead,
@@ -64,14 +72,90 @@ export function NotificationBell() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [realtimeOk, setRealtimeOk] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  // Phase 19 (Wave 10 Session 3) — owns this block.
+  // Initial fetch + cache hydration. Polling is the FALLBACK: 60s when
+  // realtime is up (covers missed events), 30s when realtime hasn't
+  // connected yet (matches the pre-Phase-19 cadence so we don't regress
+  // freshness if the channel never opens).
+  const refetchInterval = realtimeOk ? 60_000 : 30_000;
+  // End Phase 19 (Wave 10 Session 3).
 
   const query = useQuery({
     queryKey: collaborationKeys.notifications(false),
     queryFn: () => listNotifications({ limit: 20 }),
-    refetchInterval: 30_000,
+    refetchInterval,
     enabled,
   });
+
+  // Phase 19 (Wave 10 Session 3) — Supabase realtime channel.
+  // Subscribes to INSERT and UPDATE on notifications scoped to this user;
+  // any event invalidates the bell query so the list + unread count
+  // refresh. If the channel never reports SUBSCRIBED within 5s, leave
+  // realtimeOk=false so polling stays at 30s.
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    let resolved = false;
+
+    const setup = async () => {
+      const { data } = await supabase.auth.getUser();
+      const uid = data.user?.id;
+      if (!uid || cancelled) return;
+      const channel = supabase
+        .channel(`notifications:user-${uid}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_user_id=eq.${uid}`,
+          },
+          () => {
+            void qc.invalidateQueries({ queryKey: collaborationKeys.all });
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_user_id=eq.${uid}`,
+          },
+          () => {
+            void qc.invalidateQueries({ queryKey: collaborationKeys.all });
+          },
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED' && !cancelled) {
+            resolved = true;
+            setRealtimeOk(true);
+          }
+        });
+
+      // 5s timeout — if no SUBSCRIBED by then, fall back to polling.
+      const timer = setTimeout(() => {
+        if (!resolved && !cancelled) setRealtimeOk(false);
+      }, 5000);
+
+      return () => {
+        clearTimeout(timer);
+        void supabase.removeChannel(channel);
+      };
+    };
+
+    let cleanup: (() => void) | undefined;
+    void setup().then((c) => { if (cancelled) c?.(); else cleanup = c; });
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [enabled, qc]);
+  // End Phase 19 (Wave 10 Session 3).
 
   const markRead = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),

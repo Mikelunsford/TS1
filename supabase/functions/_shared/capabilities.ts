@@ -158,6 +158,9 @@ export const ALL_CAPABILITIES = [
   'search.global',
   'exports.read',
   'exports.write',
+  // Phase 19 (Wave 10 Session 3) — owns this block.
+  'pdf.render',
+  // End Phase 19 (Wave 10 Session 3).
 ] as const;
 
 export type Capability = (typeof ALL_CAPABILITIES)[number];
@@ -176,6 +179,13 @@ const WRITE_FAMILY = /\.(write|approve|convert|send|close|void|cancel|post|rever
  * (quotes.*, projects.*) follow the same rule shape.
  */
 function allow(role: Role, cap: Capability): boolean {
+  // Phase 19 (Wave 10 Session 3) — owns this block.
+  // pdf.render is available to every signed-in user (including portal users),
+  // because PDF download is a read-shaped action. The handler still
+  // enforces row-level access (org_id match + entity ownership).
+  if (cap === 'pdf.render') return true;
+  // End Phase 19 (Wave 10 Session 3).
+
   // Owners and admins have full reach.
   if (role === 'org_owner' || role === 'org_admin') return true;
 
