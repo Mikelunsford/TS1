@@ -68,6 +68,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const INVOICE_COLS =
   'id, org_id, invoice_number, customer_id, customer_name_snapshot, project_id, quote_id, ' +
@@ -153,16 +154,16 @@ async function fetchInvoiceRow(caller: Caller, id: string): Promise<InvoiceRow> 
 }
 
 async function nextInvoiceNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'invoice',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number invoice failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'invoice');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number invoice failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 async function ensureCustomerInOrg(caller: Caller, customerId: string): Promise<string> {

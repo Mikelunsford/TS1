@@ -42,6 +42,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const BUNDLE = 'ops-api';
 const RO_COLS =
@@ -131,19 +132,21 @@ export async function createReceivingOrder({ req }: Ctx): Promise<Response> {
     }
     if (!project) throw new ApiError('NOT_FOUND', 'project not found in org', 404);
 
-    const { data: numData, error: numErr } = await admin().rpc('next_doc_number', {
-      p_org_id: caller.orgId,
-      p_doc_type: 'receiving_order',
-    });
-    if (numErr || !numData) {
-      throw new ApiError('INTERNAL_ERROR', 'next_doc_number receiving_order failed', 500, {
-        detail: numErr?.message,
-      });
+    let roNumber: string;
+    try {
+      roNumber = await getNextDocNumber(admin(), caller.orgId, 'receiving_order');
+    } catch (e) {
+      if (e instanceof NumberingError) {
+        throw new ApiError('INTERNAL_ERROR', 'next_doc_number receiving_order failed', 500, {
+          detail: e.message,
+        });
+      }
+      throw e;
     }
 
     const insertRow = {
       org_id: caller.orgId,
-      ro_number: numData as string,
+      ro_number: roNumber,
       project_id: body.project_id,
       bom_item_id: body.bom_item_id ?? null,
       source: body.source,

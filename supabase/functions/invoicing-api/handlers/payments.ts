@@ -53,6 +53,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const PAYMENT_COLS =
   'id, org_id, payment_number, customer_id, invoice_id, payment_method_id, paid_at, ' +
@@ -102,16 +103,16 @@ async function fetchPaymentRow(caller: Caller, id: string): Promise<PaymentRow> 
 }
 
 async function nextPaymentNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'payment',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number payment failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'payment');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number payment failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 // =========================================================================
