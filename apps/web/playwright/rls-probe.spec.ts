@@ -559,6 +559,173 @@ async function seedCreditNoteAllocation(
   return data.id as string;
 }
 
+// =========================================================================
+// Wave 7 seed helpers — vendors / POs / po_line_items / vendor_bills /
+// expense_categories / expenses.
+//
+// Cross-tenant RLS probes only need a seed row owned by org A and a read
+// from org B. We use service-role inserts that bypass RLS and stamp org_id
+// directly; the probe asserts the with-RLS read from the wrong org returns
+// 200 + [] (FILTERING policy, never 403 THROWING).
+// =========================================================================
+
+async function seedVendor(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'vnd');
+  const { data, error } = await admin
+    .from('vendors')
+    .insert({
+      org_id: fx.org_id,
+      name: `RLS Vendor ${suffix}`,
+      currency_code: 'USD',
+      payment_terms_days: 30,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`vendor seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+async function seedPurchaseOrder(
+  fx: OrgFixture,
+): Promise<{ vendor_id: string; po_id: string }> {
+  const admin = adminClient();
+  const vendor_id = await seedVendor(fx);
+  const suffix = uniquifier(fx, 'po');
+  // Drive po_number via the next_doc_number RPC if available; fall back to
+  // a stamped string so the probe still seeds when numbering policy is
+  // unreachable in a non-prod environment.
+  const { data: numData } = await admin.rpc('next_doc_number', {
+    p_org_id: fx.org_id,
+    p_doc_type: 'purchase_order',
+  });
+  const po_number =
+    typeof numData === 'string' && numData.length > 0
+      ? numData
+      : `RLS-PO-${suffix}`.slice(0, 50);
+  const { data, error } = await admin
+    .from('purchase_orders')
+    .insert({
+      org_id: fx.org_id,
+      vendor_id,
+      po_number,
+      status: 'draft',
+      issue_date: new Date().toISOString().slice(0, 10),
+      currency_code: 'USD',
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`purchase_order seed failed: ${error?.message}`);
+  return { vendor_id, po_id: data.id as string };
+}
+
+async function seedPOLineItem(
+  fx: OrgFixture,
+  po_id: string,
+): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'poli');
+  const { data, error } = await admin
+    .from('po_line_items')
+    .insert({
+      org_id: fx.org_id,
+      po_id,
+      description: `RLS PO Line ${suffix}`,
+      quantity: 1,
+      quantity_received: 0,
+      unit_cost_cents: 1000,
+      line_total_cents: 1000,
+      position: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`po_line_item seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+async function seedVendorBill(
+  fx: OrgFixture,
+): Promise<{ vendor_id: string; bill_id: string }> {
+  const admin = adminClient();
+  const vendor_id = await seedVendor(fx);
+  const suffix = uniquifier(fx, 'vb');
+  const { data: numData } = await admin.rpc('next_doc_number', {
+    p_org_id: fx.org_id,
+    p_doc_type: 'vendor_bill',
+  });
+  const bill_number =
+    typeof numData === 'string' && numData.length > 0
+      ? numData
+      : `RLS-VB-${suffix}`.slice(0, 50);
+  const due_date = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+  const { data, error } = await admin
+    .from('vendor_bills')
+    .insert({
+      org_id: fx.org_id,
+      vendor_id,
+      bill_number,
+      status: 'draft',
+      issue_date: new Date().toISOString().slice(0, 10),
+      due_date,
+      currency_code: 'USD',
+      subtotal_cents: 10000,
+      tax_cents: 0,
+      total_cents: 10000,
+      paid_cents: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`vendor_bill seed failed: ${error?.message}`);
+  return { vendor_id, bill_id: data.id as string };
+}
+
+async function seedExpenseCategory(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'expcat');
+  const { data, error } = await admin
+    .from('expense_categories')
+    .insert({
+      org_id: fx.org_id,
+      code: `RLS-${suffix}`.slice(0, 64),
+      label: `RLS Expense Cat ${suffix}`,
+      is_active: true,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`expense_category seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+async function seedExpense(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'exp');
+  const { data: numData } = await admin.rpc('next_doc_number', {
+    p_org_id: fx.org_id,
+    p_doc_type: 'expense',
+  });
+  const expense_number =
+    typeof numData === 'string' && numData.length > 0
+      ? numData
+      : `RLS-EXP-${suffix}`.slice(0, 50);
+  const { data, error } = await admin
+    .from('expenses')
+    .insert({
+      org_id: fx.org_id,
+      expense_number,
+      status: 'draft',
+      spent_at: new Date().toISOString().slice(0, 10),
+      currency_code: 'USD',
+      amount_cents: 5000,
+      tax_cents: 0,
+      total_cents: 5000,
+      submitted_by: fx.user_id,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`expense seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
@@ -573,6 +740,16 @@ async function teardown(fx: OrgFixture): Promise<void> {
   // customers (customer_id FK).
   // Wave 6 / Phase 9: credit_note_allocations FK ON DELETE RESTRICT both
   // credit_notes and invoices; delete allocations before either parent.
+  // Wave 7 / Phase 10+11: po_line_items must drop before purchase_orders;
+  // expenses + expense_categories before tax/account refs. vendor_bills /
+  // purchase_orders both reference vendors so vendors comes last in the
+  // procurement chain.
+  await admin.from('expenses').delete().eq('org_id', fx.org_id);
+  await admin.from('expense_categories').delete().eq('org_id', fx.org_id);
+  await admin.from('vendor_bills').delete().eq('org_id', fx.org_id);
+  await admin.from('po_line_items').delete().eq('org_id', fx.org_id);
+  await admin.from('purchase_orders').delete().eq('org_id', fx.org_id);
+  await admin.from('vendors').delete().eq('org_id', fx.org_id);
   await admin.from('credit_note_allocations').delete().eq('org_id', fx.org_id);
   await admin.from('credit_notes').delete().eq('org_id', fx.org_id);
   await admin.from('payments').delete().eq('org_id', fx.org_id);
@@ -1573,6 +1750,259 @@ test.describe('Cross-tenant RLS probe', () => {
         .delete()
         .eq('org_id', orgB.org_id)
         .eq('flag_key', 'plugins.3pl');
+    }
+  });
+
+  // =========================================================================
+  // Wave 7 / Phase 10 + Phase 11 — procurement + expense surface RLS probes.
+  //
+  // Constitutional rule: tenant-scoped tables enforce org_id filtering via
+  // `using` policies on the WITH-RLS read path. A caller from a different
+  // org sees the row as if it does not exist. For PostgREST that means
+  // 200 + [] on a filtered ?id=eq.<uuid> query (never 403). The
+  // `po_line_items` table has no direct org_id column — its select policy
+  // (`poli_select_parent`) joins through purchase_orders.org_id, so the
+  // cross-tenant result is the same shape: 200 + [].
+  // =========================================================================
+
+  test('vendors: GET-by-id cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const vendor_id = await seedVendor(orgA);
+    try {
+      const res = await request.get(`${SUPABASE_URL!}/rest/v1/vendors?id=eq.${vendor_id}`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgB.access_token}`,
+          accept: 'application/json',
+        },
+      });
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A vendors by id').toHaveLength(0);
+
+      // Positive control: orgA sees its own vendor.
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/vendors?id=eq.${vendor_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own vendor').toBe(1);
+      expect(ownBody[0]!.id).toBe(vendor_id);
+    } finally {
+      await adminClient().from('vendors').delete().eq('id', vendor_id);
+    }
+  });
+
+  test('purchase_orders: GET-by-id cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const { vendor_id, po_id } = await seedPurchaseOrder(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/purchase_orders?id=eq.${po_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A POs by id').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/purchase_orders?id=eq.${po_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own PO').toBe(1);
+      expect(ownBody[0]!.id).toBe(po_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('purchase_orders').delete().eq('id', po_id);
+      await admin.from('vendors').delete().eq('id', vendor_id);
+    }
+  });
+
+  test('po_line_items: GET-by-id cross-tenant returns 200 + empty (poli_select_parent join)', async ({
+    request,
+  }) => {
+    // po_line_items has no direct org_id column — its select policy
+    // (`poli_select_parent`) filters via the parent purchase_orders.org_id.
+    // The constitutional behavior is the same: 200 + [] from org B.
+    const { vendor_id, po_id } = await seedPurchaseOrder(orgA);
+    const line_id = await seedPOLineItem(orgA, po_id);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/po_line_items?id=eq.${line_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A PO line items').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/po_line_items?id=eq.${line_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own PO line').toBe(1);
+      expect(ownBody[0]!.id).toBe(line_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('po_line_items').delete().eq('id', line_id);
+      await admin.from('purchase_orders').delete().eq('id', po_id);
+      await admin.from('vendors').delete().eq('id', vendor_id);
+    }
+  });
+
+  test('vendor_bills: GET-by-id cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const { vendor_id, bill_id } = await seedVendorBill(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/vendor_bills?id=eq.${bill_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A vendor bills by id').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/vendor_bills?id=eq.${bill_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own vendor bill').toBe(1);
+      expect(ownBody[0]!.id).toBe(bill_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('vendor_bills').delete().eq('id', bill_id);
+      await admin.from('vendors').delete().eq('id', vendor_id);
+    }
+  });
+
+  test('expense_categories: LIST cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const category_id = await seedExpenseCategory(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/expense_categories?select=id`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as Array<{ id: string }>;
+      expect(
+        body.some((r) => r.id === category_id),
+        'org B must see zero org A expense_categories',
+      ).toBe(false);
+
+      // Positive control: orgA sees its own category in LIST.
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/expense_categories?id=eq.${category_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own expense_category').toBe(1);
+      expect(ownBody[0]!.id).toBe(category_id);
+    } finally {
+      await adminClient().from('expense_categories').delete().eq('id', category_id);
+    }
+  });
+
+  test('expenses: GET-by-id cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const expense_id = await seedExpense(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/expenses?id=eq.${expense_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A expenses by id').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/expenses?id=eq.${expense_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own expense').toBe(1);
+      expect(ownBody[0]!.id).toBe(expense_id);
+    } finally {
+      await adminClient().from('expenses').delete().eq('id', expense_id);
     }
   });
 });
