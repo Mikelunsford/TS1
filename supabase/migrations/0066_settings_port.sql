@@ -1,4 +1,4 @@
--- 0065_settings_port.sql
+-- 0066_settings_port.sql
 -- Purpose: Phase 15 — per-org settings table with grouped key/value defaults
 --   for company, invoicing, quoting, finance, branding, clients. Replaces
 --   the legacy Idurar-shaped org_settings table from 0037 (seed-only,
@@ -10,9 +10,11 @@
 --   falling back to 2,500,000 cents ($25k) when the row is missing.
 --
 --   Defines `seed_org_defaults(p_org_id)` which calls `seed_org_numbering`
---   (added by Phase 14 / migration 0064) if present and `seed_org_settings`
---   unconditionally. The seed_org_numbering guard via to_regprocedure makes
---   merge-order between 0064 and 0065 tolerant.
+--   (added by Phase 14 / migration 0065_unify_numbering) if present and
+--   `seed_org_settings` unconditionally. The seed_org_numbering guard via
+--   to_regprocedure makes merge-order tolerant; this file was originally
+--   numbered 0065 and was renumbered to 0066 when BE-1's 0065_unify_numbering
+--   landed on main first (PR #75 merged before PR #76 / Phase 15 push).
 --
 -- Closes BUILD-ORDER §Phase 15 (per-org settings + RequireFlag SPA gating),
 --   observations R-W7-OBS-01 (per-route gating decision) and R-W8F-OBS-01
