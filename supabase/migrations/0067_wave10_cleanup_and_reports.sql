@@ -49,8 +49,9 @@
 --   * `invoice_line_items.item_id` FKs `pricing_menu`, not a (non-
 --     existent) `items` table. sales_by_item joins pricing_menu and
 --     uses pricing_menu.description as `item_name`.
---   * `customers.name` is the display column (no `display_name` /
---     `company_name`); ar_aging and sales_by_customer use that.
+--   * `customers.display_name` is the canonical display column (Wave 6 /
+--     migration 0054 renamed `name` → `display_name`). ar_aging and
+--     sales_by_customer JOIN on c.id and project c.display_name.
 --
 -- DOWN MIGRATION:
 --   DROP FUNCTION IF EXISTS public.ar_aging(uuid, date, text);
@@ -192,7 +193,7 @@ AS $$
   )
   SELECT
     c.id                                                  AS customer_id,
-    c.name                                                AS customer_name,
+    c.display_name                                        AS customer_name,
     COALESCE(SUM(CASE WHEN oi.days_overdue <= 0  THEN oi.bal ELSE 0 END), 0)::bigint AS current_cents,
     COALESCE(SUM(CASE WHEN oi.days_overdue BETWEEN 1  AND 30 THEN oi.bal ELSE 0 END), 0)::bigint AS days_1_30_cents,
     COALESCE(SUM(CASE WHEN oi.days_overdue BETWEEN 31 AND 60 THEN oi.bal ELSE 0 END), 0)::bigint AS days_31_60_cents,
@@ -201,8 +202,8 @@ AS $$
     COALESCE(SUM(oi.bal), 0)::bigint                       AS total_cents
   FROM open_invoices oi
   JOIN public.customers c ON c.id = oi.customer_id
-  GROUP BY c.id, c.name
-  ORDER BY c.name, c.id;
+  GROUP BY c.id, c.display_name
+  ORDER BY c.display_name, c.id;
 $$;
 
 COMMENT ON FUNCTION public.ar_aging(uuid, date, text) IS
@@ -243,7 +244,7 @@ SET search_path = public
 AS $$
   SELECT
     c.id                                                       AS customer_id,
-    c.name                                                     AS customer_name,
+    c.display_name                                             AS customer_name,
     COUNT(i.id)::int                                           AS invoice_count,
     COALESCE(SUM(i.total_cents), 0)::bigint                    AS gross_cents,
     COALESCE(SUM(i.tax_cents),   0)::bigint                    AS tax_cents,
@@ -255,8 +256,8 @@ AS $$
     AND i.issue_date    BETWEEN p_start AND p_end
     AND i.status        NOT IN ('draft','cancelled')
     AND i.deleted_at    IS NULL
-  GROUP BY c.id, c.name
-  ORDER BY c.name, c.id;
+  GROUP BY c.id, c.display_name
+  ORDER BY c.display_name, c.id;
 $$;
 
 COMMENT ON FUNCTION public.sales_by_customer(uuid, date, date, text) IS
