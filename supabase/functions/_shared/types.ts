@@ -1600,3 +1600,222 @@ export const CreditNoteVoidSchema = z.object({
   reason: z.string().min(1).max(2000),
 });
 export type CreditNoteVoid = z.infer<typeof CreditNoteVoidSchema>;
+
+// ============================================================================
+// Wave 7 / Phase 10 — Vendors / Purchase orders / PO line items / Vendor bills
+// ============================================================================
+//
+// All four tables already exist in prod from Wave 0 chassis. Schemas here are
+// reconciled DB-wins (verified 2026-05-16, schema_migrations=0058). Notable:
+//   - vendors.name (NOT display_name; F-Wave6-03 only renamed customers)
+//   - purchase_orders.status CHECK 7 values incl `partial_received` (not
+//     `partially_received`) and `closed` as a post-`received` terminal
+//   - vendor_bills.status CHECK 7 values incl `partially_paid`+`overdue`
+//   - po_line_items.quantity / quantity_received are numeric (use number,
+//     not bigint; line totals computed from quantity × unit_cost_cents)
+//   - vendor_bills.balance_cents is set by the BIU trigger added in 0058
+//     (handler-side reads only; never write directly)
+//   - vendor_bills has no line items table in prod — header totals only
+
+export const VendorSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  name: z.string().min(1).max(255),
+  legal_name: z.string().max(255).nullable(),
+  email: z.string().email().nullable(),
+  phone: z.string().max(64).nullable(),
+  website: z.string().max(255).nullable(),
+  tax_id: z.string().max(64).nullable(),
+  currency_code: z.string().length(3).nullable(),
+  payment_terms_days: z.number().int().nonnegative(),
+  billing_address: z.record(z.unknown()),
+  external_ref: z.string().max(255).nullable(),
+  notes: z.string().nullable(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+  deleted_at: TimestampSchema.nullable(),
+});
+export type Vendor = z.infer<typeof VendorSchema>;
+
+export const VendorCreateSchema = z.object({
+  name: z.string().min(1).max(255),
+  legal_name: z.string().max(255).nullable().optional(),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().max(64).nullable().optional(),
+  website: z.string().max(255).nullable().optional(),
+  tax_id: z.string().max(64).nullable().optional(),
+  currency_code: z.string().length(3).nullable().optional(),
+  payment_terms_days: z.number().int().nonnegative().optional(),
+  billing_address: z.record(z.unknown()).optional(),
+  external_ref: z.string().max(255).nullable().optional(),
+  notes: z.string().nullable().optional(),
+}).strict();
+export type VendorCreate = z.infer<typeof VendorCreateSchema>;
+
+export const VendorPatchSchema = VendorCreateSchema.partial().extend({
+  is_active: z.boolean().optional(),
+}).strict();
+export type VendorPatch = z.infer<typeof VendorPatchSchema>;
+
+export const PurchaseOrderStateSchema = z.enum([
+  'draft', 'submitted', 'approved', 'partial_received', 'received', 'cancelled', 'closed',
+]);
+export type PurchaseOrderState = z.infer<typeof PurchaseOrderStateSchema>;
+
+export const PurchaseOrderSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  po_number: z.string(),
+  vendor_id: UuidSchema,
+  project_id: UuidSchema.nullable(),
+  status: PurchaseOrderStateSchema,
+  issue_date: z.string().date(),
+  expected_date: z.string().date().nullable(),
+  currency_code: z.string().length(3),
+  subtotal_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  shipping_cents: CentsSchema,
+  total_cents: CentsSchema,
+  notes: z.string().nullable(),
+  state_changed_at: TimestampSchema,
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+  deleted_at: TimestampSchema.nullable(),
+});
+export type PurchaseOrder = z.infer<typeof PurchaseOrderSchema>;
+
+export const PurchaseOrderCreateSchema = z.object({
+  vendor_id: UuidSchema,
+  project_id: UuidSchema.nullable().optional(),
+  issue_date: z.string().date().optional(),
+  expected_date: z.string().date().nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  tax_cents: z.number().int().nonnegative().optional(),
+  shipping_cents: z.number().int().nonnegative().optional(),
+  notes: z.string().nullable().optional(),
+  lines: z.array(z.object({
+    item_id: UuidSchema.nullable().optional(),
+    description: z.string().min(1).max(2000),
+    quantity: z.number().positive(),
+    unit: z.string().max(32).nullable().optional(),
+    unit_cost_cents: z.number().int().nonnegative(),
+    position: z.number().int().nonnegative().optional(),
+  })).optional(),
+}).strict();
+export type PurchaseOrderCreate = z.infer<typeof PurchaseOrderCreateSchema>;
+
+export const PurchaseOrderPatchSchema = z.object({
+  project_id: UuidSchema.nullable().optional(),
+  issue_date: z.string().date().optional(),
+  expected_date: z.string().date().nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  tax_cents: z.number().int().nonnegative().optional(),
+  shipping_cents: z.number().int().nonnegative().optional(),
+  notes: z.string().nullable().optional(),
+}).strict();
+export type PurchaseOrderPatch = z.infer<typeof PurchaseOrderPatchSchema>;
+
+export const POLineItemSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  po_id: UuidSchema,
+  item_id: UuidSchema.nullable(),
+  description: z.string(),
+  quantity: z.number(),
+  quantity_received: z.number(),
+  unit: z.string().nullable(),
+  unit_cost_cents: CentsSchema,
+  line_total_cents: CentsSchema,
+  position: z.number().int().nonnegative(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type POLineItem = z.infer<typeof POLineItemSchema>;
+
+export const POLineItemCreateSchema = z.object({
+  item_id: UuidSchema.nullable().optional(),
+  description: z.string().min(1).max(2000),
+  quantity: z.number().positive(),
+  unit: z.string().max(32).nullable().optional(),
+  unit_cost_cents: z.number().int().nonnegative(),
+  position: z.number().int().nonnegative().optional(),
+}).strict();
+export type POLineItemCreate = z.infer<typeof POLineItemCreateSchema>;
+
+export const POLineItemPatchSchema = z.object({
+  description: z.string().min(1).max(2000).optional(),
+  quantity: z.number().positive().optional(),
+  unit: z.string().max(32).nullable().optional(),
+  unit_cost_cents: z.number().int().nonnegative().optional(),
+  position: z.number().int().nonnegative().optional(),
+}).strict();
+export type POLineItemPatch = z.infer<typeof POLineItemPatchSchema>;
+
+/** POST /purchase-orders/:id/receive — partial-receive payload. */
+export const PurchaseOrderReceiveSchema = z.object({
+  lines: z.array(z.object({
+    po_line_item_id: UuidSchema,
+    quantity_received: z.number().nonnegative(),
+  })).min(1),
+}).strict();
+export type PurchaseOrderReceive = z.infer<typeof PurchaseOrderReceiveSchema>;
+
+export const VendorBillStateSchema = z.enum([
+  'draft', 'pending', 'approved', 'partially_paid', 'paid', 'overdue', 'cancelled',
+]);
+export type VendorBillState = z.infer<typeof VendorBillStateSchema>;
+
+export const VendorBillSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  bill_number: z.string(),
+  vendor_id: UuidSchema,
+  po_id: UuidSchema.nullable(),
+  vendor_ref: z.string().nullable(),
+  status: VendorBillStateSchema,
+  issue_date: z.string().date(),
+  due_date: z.string().date(),
+  currency_code: z.string().length(3),
+  subtotal_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  total_cents: CentsSchema,
+  paid_cents: CentsSchema,
+  balance_cents: CentsSchema.nullable(),
+  notes: z.string().nullable(),
+  approved_at: TimestampSchema.nullable(),
+  approved_by: UuidSchema.nullable(),
+  paid_at: TimestampSchema.nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+  deleted_at: TimestampSchema.nullable(),
+});
+export type VendorBill = z.infer<typeof VendorBillSchema>;
+
+export const VendorBillCreateSchema = z.object({
+  vendor_id: UuidSchema,
+  po_id: UuidSchema.nullable().optional(),
+  vendor_ref: z.string().max(255).nullable().optional(),
+  issue_date: z.string().date().optional(),
+  due_date: z.string().date(),
+  currency_code: z.string().length(3).optional(),
+  subtotal_cents: z.number().int().nonnegative(),
+  tax_cents: z.number().int().nonnegative().optional(),
+  total_cents: z.number().int().nonnegative(),
+  notes: z.string().nullable().optional(),
+}).strict();
+export type VendorBillCreate = z.infer<typeof VendorBillCreateSchema>;
+
+export const VendorBillPatchSchema = VendorBillCreateSchema.omit({
+  vendor_id: true, total_cents: true, subtotal_cents: true,
+}).partial().extend({
+  subtotal_cents: z.number().int().nonnegative().optional(),
+  total_cents: z.number().int().nonnegative().optional(),
+}).strict();
+export type VendorBillPatch = z.infer<typeof VendorBillPatchSchema>;
+
+/** POST /vendor-bills/:id/pay — amount payload (defaults to full balance). */
+export const VendorBillPaySchema = z.object({
+  amount_cents: z.number().int().positive().optional(),
+}).strict();
+export type VendorBillPay = z.infer<typeof VendorBillPaySchema>;
