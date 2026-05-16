@@ -8,17 +8,21 @@ import {
   ClipboardList,
   Contact,
   CreditCard,
+  Factory,
   FileText,
   FolderTree,
   Home,
   Layers,
+  PackageOpen,
   Receipt,
+  Send,
   Settings,
   Sparkles,
   TrendingUp,
   Truck,
   Users,
   Wallet,
+  Warehouse,
 } from 'lucide-react';
 
 import { cn } from '@/lib/format';
@@ -65,15 +69,37 @@ const items: NavItem[] = [
   { to: '/payments', label: 'Payments', icon: CreditCard, requireCap: 'payments.read' },
   { to: '/credit-notes', label: 'Credit Notes', icon: Receipt, requireCap: 'credit_notes.read' },
   // end payments + credit notes nav.
+  // Inventory (Wave 8f / Phase 13 — FE-A owns this block)
   {
     to: '/items',
     label: 'Inventory',
     icon: Boxes,
+    requireCap: 'inventory.warehouses.read',
     children: [
       { to: '/items', label: 'Items', icon: Boxes },
       { to: '/items/categories', label: 'Categories', icon: FolderTree },
+      { to: '/warehouses', label: 'Warehouses', icon: Warehouse },
+      { to: '/stock', label: 'Stock', icon: Layers },
     ],
   },
+  // end inventory nav.
+  // Operations / 3PL (Wave 8f / Phase 13 — FE-A owns this block)
+  // Bundle-level gate on plugins.3pl lives on the BE (ops-api). On the SPA
+  // we cap-gate on receiving.read; the role policy already aligns
+  // receiving/production/shipping caps with the same role surface, so
+  // hiding any one of them effectively hides the section.
+  {
+    to: '/receiving',
+    label: 'Operations',
+    icon: Factory,
+    requireCap: 'receiving.read',
+    children: [
+      { to: '/receiving', label: 'Receiving', icon: PackageOpen },
+      { to: '/production', label: 'Production', icon: Factory },
+      { to: '/shipments', label: 'Shipments', icon: Send },
+    ],
+  },
+  // end operations nav.
   // Procurement (Wave 7 / Phase 10 — FE-A owns this block)
   {
     to: '/vendors',
