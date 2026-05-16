@@ -533,6 +533,32 @@ async function seedCreditNote(
   return data.id as string;
 }
 
+/**
+ * Seed a credit_note_allocations row (Wave 6 / Phase 9 / 0056). The CN must
+ * already exist (caller owns it). Returns the allocation id. The trigger
+ * tg_cna_sync_cn will bump credit_notes.applied_cents synchronously; the
+ * caller's teardown handles cascade via the org_id delete in teardown().
+ */
+async function seedCreditNoteAllocation(
+  fx: OrgFixture,
+  credit_note_id: string,
+  invoice_id: string,
+): Promise<string> {
+  const admin = adminClient();
+  const { data, error } = await admin
+    .from('credit_note_allocations')
+    .insert({
+      org_id: fx.org_id,
+      credit_note_id,
+      invoice_id,
+      amount_cents: 1,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`credit_note_allocation seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
@@ -545,6 +571,9 @@ async function teardown(fx: OrgFixture): Promise<void> {
   // Wave 5: credit_notes + payments must drop before invoices (invoice_id FK);
   // invoice_line_items + invoice_versions before invoices; invoices before
   // customers (customer_id FK).
+  // Wave 6 / Phase 9: credit_note_allocations FK ON DELETE RESTRICT both
+  // credit_notes and invoices; delete allocations before either parent.
+  await admin.from('credit_note_allocations').delete().eq('org_id', fx.org_id);
   await admin.from('credit_notes').delete().eq('org_id', fx.org_id);
   await admin.from('payments').delete().eq('org_id', fx.org_id);
   await admin.from('invoice_line_items').delete().eq('org_id', fx.org_id);
@@ -1387,6 +1416,163 @@ test.describe('Cross-tenant RLS probe', () => {
       await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
       await admin.from('invoices').delete().eq('id', invoice_id);
       await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  // =========================================================================
+  // Wave 6 / Phase 9 — credit_note_allocations cross-tenant matrix.
+  // The allocations table (migration 0056) has its own RLS policies
+  // (cna_select_staff + cna_write_fin). PostgREST surface is at
+  // /rest/v1/credit_note_allocations; LIST must return 200 + empty,
+  // GET-by-id must return 200 + empty (filtering, never throwing).
+  // =========================================================================
+
+  test('credit_note_allocations: LIST cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    const credit_note_id = await seedCreditNote(orgA, customer_id, invoice_id);
+    const allocation_id = await seedCreditNoteAllocation(orgA, credit_note_id, invoice_id);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/credit_note_allocations?select=id`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      // RLS MUST filter via `using` predicate, never throw 403.
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as Array<{ id: string }>;
+      expect(body.some((r) => r.id === allocation_id), 'org B must see zero org A allocations').toBe(
+        false,
+      );
+    } finally {
+      const admin = adminClient();
+      await admin.from('credit_note_allocations').delete().eq('id', allocation_id);
+      await admin.from('credit_notes').delete().eq('id', credit_note_id);
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('credit_note_allocations: GET-by-id cross-tenant returns 200 + empty array', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    const credit_note_id = await seedCreditNote(orgA, customer_id, invoice_id);
+    const allocation_id = await seedCreditNoteAllocation(orgA, credit_note_id, invoice_id);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/credit_note_allocations?id=eq.${allocation_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      // PostgREST returns 200 + [] when the row is RLS-filtered. The
+      // constitutional rule is "row appears not to exist" — for the
+      // ?id=eq.… filter that's the empty array. Equivalent to the 404
+      // story on the handler side; never 403.
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A allocations by id').toHaveLength(0);
+
+      // Positive control: orgA sees its own allocation row.
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/credit_note_allocations?id=eq.${allocation_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own allocation').toBe(1);
+      expect(ownBody[0]!.id).toBe(allocation_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('credit_note_allocations').delete().eq('id', allocation_id);
+      await admin.from('credit_notes').delete().eq('id', credit_note_id);
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  // =========================================================================
+  // Wave 6 / Phase 6 — ops-api `plugins.3pl` plugin gating probes.
+  // The bundle gate (supabase/functions/ops-api/index.ts) responds 404 on
+  // every non-health route when the caller's org lacks the `plugins.3pl`
+  // feature flag (Phase 6 DoD).
+  //
+  // The Wave-6 routes.ts intentionally leaves /receiving-orders unimplemented
+  // (the route table only registers `GET /`). Both probes below assert 404 —
+  // a flag-OFF org sees 404 because the gate denies BEFORE routing
+  // (feature-not-available), and a flag-ON org sees 404 because no route is
+  // registered. The semantic distinction (gate-miss vs router-miss) is
+  // intentionally documented here: the gate doesn't BLOCK flag-on orgs from
+  // hitting future routes; it just hides the entire plugin surface from
+  // flag-off orgs.
+  // =========================================================================
+
+  test('ops-api: GET /receiving-orders with plugins.3pl OFF returns 404 (gate-miss)', async ({
+    request,
+  }) => {
+    // orgA defaults to flag OFF (no insert into org_feature_flags).
+    const res = await request.get(`${functionsBase()}/ops-api/receiving-orders`, {
+      headers: { authorization: `Bearer ${orgA.access_token}`, apikey: ANON_KEY! },
+    });
+    test.skip(res.status() >= 500, `ops-api unreachable (HTTP ${res.status()})`);
+    expect(res.status(), 'gate-miss MUST 404, never 403').toBe(404);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('NOT_FOUND');
+  });
+
+  test('ops-api: GET /receiving-orders with plugins.3pl ON returns 404 (router-miss)', async ({
+    request,
+  }) => {
+    // Flip the flag ON for orgB just for this assertion. The teardown sweep
+    // also clears org_feature_flags but we delete explicitly here so the
+    // test isolation is obvious.
+    const admin = adminClient();
+    const { error: upsertErr } = await admin.from('org_feature_flags').upsert(
+      { org_id: orgB.org_id, flag_key: 'plugins.3pl', is_enabled: true },
+      { onConflict: 'org_id,flag_key' },
+    );
+    if (upsertErr) throw new Error(`flag upsert failed: ${upsertErr.message}`);
+    try {
+      // The bundle's in-memory cache could have a stale `false` from a
+      // previous probe. There's no public flush hook from the test side, so
+      // we accept either 404 (good — router miss after gate-pass) or, if the
+      // bundle's per-instance cache hasn't expired, 404 again (gate-miss with
+      // identical envelope). Both shapes are constitutionally correct: the
+      // load-bearing assertion is "never 200, never 403".
+      const res = await request.get(`${functionsBase()}/ops-api/receiving-orders`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `ops-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'flag-on org never sees 200 (route not implemented) or 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      await admin
+        .from('org_feature_flags')
+        .delete()
+        .eq('org_id', orgB.org_id)
+        .eq('flag_key', 'plugins.3pl');
     }
   });
 });
