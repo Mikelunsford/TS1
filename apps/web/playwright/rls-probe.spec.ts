@@ -442,6 +442,97 @@ async function seedExchangeRate(): Promise<string> {
   return data.id as string;
 }
 
+// =========================================================================
+// Wave 5 seed helpers — invoices + payments + credit_notes.
+// =========================================================================
+
+/**
+ * Seed a customer + invoice owned by `fx.org_id`. The recompute trigger
+ * + create_v1_for_invoice trigger run automatically on INSERT; teardown
+ * cascades via the org_id delete in the teardown() function.
+ */
+async function seedInvoice(
+  fx: OrgFixture,
+): Promise<{ customer_id: string; invoice_id: string }> {
+  const admin = adminClient();
+  const customer_id = await seedCustomer(fx);
+  const suffix = uniquifier(fx, 'inv');
+  const { data, error } = await admin
+    .from('invoices')
+    .insert({
+      org_id: fx.org_id,
+      invoice_number: `RLS-INV-${suffix}`.slice(0, 50),
+      customer_id,
+      customer_name_snapshot: `RLS Customer ${fx.org_id.slice(0, 8)}`,
+      status: 'draft',
+      payment_status: 'unpaid',
+      issue_date: '2026-05-15',
+      due_date: '2026-06-14',
+      currency_code: 'USD',
+      subtotal_cents: 0,
+      discount_cents: 0,
+      tax_cents: 0,
+      total_cents: 0,
+      paid_cents: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`invoice seed failed: ${error?.message}`);
+  return { customer_id, invoice_id: data.id as string };
+}
+
+/** Seed a payment row on an existing invoice. Caller owns cleanup of invoice + customer. */
+async function seedPayment(
+  fx: OrgFixture,
+  customer_id: string,
+  invoice_id: string,
+): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'pay');
+  const { data, error } = await admin
+    .from('payments')
+    .insert({
+      org_id: fx.org_id,
+      payment_number: `RLS-PAY-${suffix}`.slice(0, 50),
+      customer_id,
+      invoice_id,
+      amount_cents: 1,
+      currency_code: 'USD',
+      paid_at: '2026-05-15T12:00:00+00:00',
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`payment seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Seed a credit_note row. Caller owns cleanup of invoice + customer. */
+async function seedCreditNote(
+  fx: OrgFixture,
+  customer_id: string,
+  invoice_id: string,
+): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'cn');
+  const { data, error } = await admin
+    .from('credit_notes')
+    .insert({
+      org_id: fx.org_id,
+      credit_note_number: `RLS-CN-${suffix}`.slice(0, 50),
+      customer_id,
+      invoice_id,
+      issue_date: '2026-05-15',
+      status: 'draft',
+      currency_code: 'USD',
+      amount_cents: 100,
+      applied_cents: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`credit_note seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
@@ -451,6 +542,14 @@ async function teardown(fx: OrgFixture): Promise<void> {
   // Wave 4 sales-chassis tables: phases must drop before projects (project_id FK),
   // quote_versions must drop before quotes (quote_id FK). quotes.customer_id is
   // ON DELETE RESTRICT so quotes must drop before customers.
+  // Wave 5: credit_notes + payments must drop before invoices (invoice_id FK);
+  // invoice_line_items + invoice_versions before invoices; invoices before
+  // customers (customer_id FK).
+  await admin.from('credit_notes').delete().eq('org_id', fx.org_id);
+  await admin.from('payments').delete().eq('org_id', fx.org_id);
+  await admin.from('invoice_line_items').delete().eq('org_id', fx.org_id);
+  await admin.from('invoice_versions').delete().eq('org_id', fx.org_id);
+  await admin.from('invoices').delete().eq('org_id', fx.org_id);
   await admin.from('project_phases').delete().eq('org_id', fx.org_id);
   await admin.from('projects').delete().eq('org_id', fx.org_id);
   await admin.from('quote_line_items').delete().eq('org_id', fx.org_id);
@@ -1070,6 +1169,223 @@ test.describe('Cross-tenant RLS probe', () => {
       await admin.from('quote_line_items').delete().eq('quote_id', quote_id);
       await admin.from('quote_versions').delete().eq('quote_id', quote_id);
       await admin.from('quotes').delete().eq('id', quote_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  // =========================================================================
+  // Wave 5 invoicing HTTP-level RLS probe.
+  // Each test seeds an org-A row directly via service role, then issues an
+  // authenticated HTTP request from org B and asserts RLS filters the row.
+  // For list endpoints: 200 + empty items[] (canonical filter behaviour).
+  // For detail / workflow-POST endpoints: 404 NOT_FOUND (handler-emitted; never 403).
+  // =========================================================================
+
+  test('invoicing-api: GET /invoices returns empty items[] to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    try {
+      const res = await request.get(`${functionsBase()}/invoicing-api/invoices`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+      expect(json.data.items.some((i) => i.id === invoice_id)).toBe(false);
+    } finally {
+      const admin = adminClient();
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: GET /invoices/:id returns 404 to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    try {
+      const res = await request.get(
+        `${functionsBase()}/invoicing-api/invoices/${invoice_id}`,
+        {
+          headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'cross-tenant detail MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: PATCH /invoices/:id on a cross-tenant invoice returns 404', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    try {
+      const res = await request.patch(
+        `${functionsBase()}/invoicing-api/invoices/${invoice_id}`,
+        {
+          headers: {
+            authorization: `Bearer ${orgB.access_token}`,
+            apikey: ANON_KEY!,
+            'idempotency-key': crypto.randomUUID(),
+            'content-type': 'application/json',
+          },
+          data: { notes: 'cross-tenant patch attempt' },
+        },
+      );
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'cross-tenant PATCH MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: POST /invoices/:id/submit on a cross-tenant invoice returns 404', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    try {
+      const res = await request.post(
+        `${functionsBase()}/invoicing-api/invoices/${invoice_id}/submit`,
+        {
+          headers: {
+            authorization: `Bearer ${orgB.access_token}`,
+            apikey: ANON_KEY!,
+            'idempotency-key': crypto.randomUUID(),
+            'content-type': 'application/json',
+          },
+          data: {},
+        },
+      );
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      // 404 (RLS hides the parent) — NOT 403, which would leak existence.
+      expect(res.status(), 'cross-tenant workflow POST MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: GET /payments returns empty items[] to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    const payment_id = await seedPayment(orgA, customer_id, invoice_id);
+    try {
+      const res = await request.get(`${functionsBase()}/invoicing-api/payments`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+      expect(json.data.items.some((p) => p.id === payment_id)).toBe(false);
+    } finally {
+      const admin = adminClient();
+      await admin.from('payments').delete().eq('id', payment_id);
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: GET /payments/:id returns 404 to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    const payment_id = await seedPayment(orgA, customer_id, invoice_id);
+    try {
+      const res = await request.get(
+        `${functionsBase()}/invoicing-api/payments/${payment_id}`,
+        {
+          headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'cross-tenant detail MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('payments').delete().eq('id', payment_id);
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: GET /credit-notes returns empty items[] to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    const credit_note_id = await seedCreditNote(orgA, customer_id, invoice_id);
+    try {
+      const res = await request.get(`${functionsBase()}/invoicing-api/credit-notes`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `invoicing-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+      expect(json.data.items.some((c) => c.id === credit_note_id)).toBe(false);
+    } finally {
+      const admin = adminClient();
+      await admin.from('credit_notes').delete().eq('id', credit_note_id);
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('invoicing-api: positive control — org A sees its own invoice in list + detail', async ({
+    request,
+  }) => {
+    const { customer_id, invoice_id } = await seedInvoice(orgA);
+    try {
+      const listRes = await request.get(`${functionsBase()}/invoicing-api/invoices`, {
+        headers: { authorization: `Bearer ${orgA.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(listRes.status() >= 500, `invoicing-api unreachable (HTTP ${listRes.status()})`);
+      expect(listRes.status()).toBe(200);
+      const listJson = (await listRes.json()) as { data: { items: Array<{ id: string }> } };
+      expect(listJson.data.items.some((i) => i.id === invoice_id)).toBe(true);
+
+      const detailRes = await request.get(
+        `${functionsBase()}/invoicing-api/invoices/${invoice_id}`,
+        {
+          headers: { authorization: `Bearer ${orgA.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      expect(detailRes.status()).toBe(200);
+      const detailJson = (await detailRes.json()) as { data: { id: string } };
+      expect(detailJson.data.id).toBe(invoice_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('invoice_line_items').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoice_versions').delete().eq('invoice_id', invoice_id);
+      await admin.from('invoices').delete().eq('id', invoice_id);
       await admin.from('customers').delete().eq('id', customer_id);
     }
   });
