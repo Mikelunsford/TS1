@@ -129,14 +129,11 @@ export async function withIdempotency(
 
   const admin = createAdminClient();
 
-  // The on-cloud `idempotency_keys` shape carries three pre-Wave-0 columns
-  // (`endpoint`, `request_hash`, `response`) alongside the Wave-1
-  // architecture-spec columns (`route_hash`, `body_hash`, `response_jsonb`).
-  // Migration 0048 (Wave 3) relaxed NOT NULL + added empty defaults on the
-  // three legacy columns; this helper no longer writes them. A future
-  // migration (F-Wave3-01-b, Wave 4) drops the legacy columns once one
-  // release cycle confirms zero writers. PK is (key, user_id); org_id is
-  // enforced via RLS.
+  // `idempotency_keys` is now the canonical Wave-1 architecture-spec shape:
+  // (key, user_id, org_id, route_hash, body_hash, response_jsonb, status_code,
+  // created_at). The legacy trio (`endpoint`, `request_hash`, `response`) was
+  // relaxed in 0048 (Wave 3) and dropped in 0053 (Wave 6 / F-Wave6-04 —
+  // closes R-W1-05). PK is (key, user_id); org_id is enforced via RLS.
   const { data: existing, error: lookupErr } = await admin
     .from('idempotency_keys')
     .select('org_id, route_hash, body_hash, status_code, response_jsonb, created_at')
@@ -180,9 +177,8 @@ export async function withIdempotency(
 
   const fresh = await handler();
 
-  // Architecture-spec columns only. The legacy columns (`endpoint`,
-  // `request_hash`, `response`) are filled by their post-0048 defaults
-  // ('', '', '{}'::jsonb); they're queued for drop in F-Wave3-01-b.
+  // Architecture-spec columns only. The legacy trio was dropped by 0053
+  // (Wave 6 / F-Wave6-04).
   const upsertRow = {
     key,
     user_id: ctx.org.userId,
