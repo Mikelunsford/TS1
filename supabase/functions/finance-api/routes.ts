@@ -47,6 +47,21 @@ import {
   reimburseExpense,
   submitExpense,
 } from './handlers/expenses.ts';
+import {
+  archiveChartOfAccount,
+  createChartOfAccount,
+  getChartOfAccount,
+  listChartOfAccounts,
+  patchChartOfAccount,
+} from './handlers/chart-of-accounts.ts';
+import {
+  createJournalEntry,
+  getJournalEntry,
+  listJournalEntries,
+  patchJournalEntry,
+  postJournalEntry,
+  reverseJournalEntry,
+} from './handlers/journal-entries.ts';
 
 const BUNDLE = 'finance-api';
 
@@ -95,4 +110,19 @@ export const routes: Route[] = [
   { method: 'POST', path: '/expenses/:id/reject', handler: rejectExpense },
   { method: 'POST', path: '/expenses/:id/reimburse', handler: reimburseExpense },
   { method: 'POST', path: '/expenses/:id/pay', handler: payExpense },
+
+  // Chart of accounts (Wave 8 / Phase 12)
+  { method: 'GET', path: '/chart-of-accounts', handler: listChartOfAccounts },
+  { method: 'POST', path: '/chart-of-accounts', handler: createChartOfAccount },
+  { method: 'GET', path: '/chart-of-accounts/:id', handler: getChartOfAccount },
+  { method: 'PATCH', path: '/chart-of-accounts/:id', handler: patchChartOfAccount },
+  { method: 'POST', path: '/chart-of-accounts/:id/archive', handler: archiveChartOfAccount },
+
+  // Journal entries (Wave 8 / Phase 12)
+  { method: 'GET', path: '/journal-entries', handler: listJournalEntries },
+  { method: 'POST', path: '/journal-entries', handler: createJournalEntry },
+  { method: 'GET', path: '/journal-entries/:id', handler: getJournalEntry },
+  { method: 'PATCH', path: '/journal-entries/:id', handler: patchJournalEntry },
+  { method: 'POST', path: '/journal-entries/:id/post', handler: postJournalEntry },
+  { method: 'POST', path: '/journal-entries/:id/reverse', handler: reverseJournalEntry },
 ];

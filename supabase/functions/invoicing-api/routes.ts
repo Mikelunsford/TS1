@@ -33,6 +33,7 @@ import {
   replaceInvoiceLines,
 } from './handlers/line-items.ts';
 import {
+  allocatePayment,
   createPayment,
   getPayment,
   listPayments,
@@ -87,6 +88,7 @@ export const routes: Route[] = [
   { method: 'GET', path: '/payments/:id', handler: getPayment },
   { method: 'PATCH', path: '/payments/:id', handler: patchPayment },
   { method: 'POST', path: '/payments/:id/void', handler: voidPayment },
+  { method: 'POST', path: '/payments/:id/allocate', handler: allocatePayment },
 
   // ---- Credit notes ----
   { method: 'GET', path: '/credit-notes', handler: listCreditNotes },

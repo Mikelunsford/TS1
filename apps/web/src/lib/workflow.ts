@@ -118,6 +118,16 @@ export type ExpenseState =
   | 'paid';
 
 /**
+ * Journal entry state — prod `journal_entries.status` text CHECK (verified
+ * 2026-05-16, schema_migrations=0058). Three values; `reversed` is terminal.
+ * `draft` entries may be reversed without ever being posted (audit trail for
+ * abandoned drafts). Posting a balanced entry stamps `posted_at`; reversing
+ * a posted entry creates a mirror entry with flipped debits/credits and
+ * stamps `reversed_at` + `reversed_by_entry_id` on the original.
+ */
+export type JournalEntryState = 'draft' | 'posted' | 'reversed';
+
+/**
  * Quote transitions matrix. Every (from -> to) listed here is a legal real
  * state change. Endpoints whose semantics are timestamp/activity-only (send,
  * accept) DO NOT appear here; the handler stamps state_changed_at + emits an
@@ -242,6 +252,20 @@ export const EXPENSE_TRANSITIONS: Record<ExpenseState, readonly ExpenseState[]> 
   paid: [],
 };
 
+/**
+ * Journal entry transitions (Wave 8 / Phase 12). Lifecycle:
+ *   draft → posted → reversed.
+ * `reversed` reachable from both `draft` and `posted` — reversing a draft
+ * is the audit-friendly equivalent of discarding an unposted entry, while
+ * reversing a posted entry produces a mirror entry with flipped debits and
+ * credits. `reversed` is terminal.
+ */
+export const JOURNAL_ENTRY_TRANSITIONS: Record<JournalEntryState, readonly JournalEntryState[]> = {
+  draft: ['posted', 'reversed'],
+  posted: ['reversed'],
+  reversed: [],
+};
+
 export type WorkflowMachine =
   | 'quote'
   | 'project'
@@ -250,7 +274,8 @@ export type WorkflowMachine =
   | 'credit_note'
   | 'purchase_order'
   | 'vendor_bill'
-  | 'expense';
+  | 'expense'
+  | 'journal_entry';
 
 type Matrix = Record<string, readonly string[]>;
 
@@ -272,6 +297,8 @@ function getMatrix(machine: WorkflowMachine): Matrix {
       return VENDOR_BILL_TRANSITIONS as Matrix;
     case 'expense':
       return EXPENSE_TRANSITIONS as Matrix;
+    case 'journal_entry':
+      return JOURNAL_ENTRY_TRANSITIONS as Matrix;
   }
 }
 
