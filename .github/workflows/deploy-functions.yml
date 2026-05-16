@@ -70,9 +70,10 @@ jobs:
             inventory-api
             dashboard-api
             exports-api
+            imports-api
           )
           for bundle in "${BUNDLES[@]}"; do
             echo "==> Deploying $bundle"
             supabase functions deploy "$bundle" --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
           done
-          echo "All 13 functions deployed."
+          echo "All 14 functions deployed."

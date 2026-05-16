@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { QuoteStatusBadge } from '@/components/quotes/QuoteStatusBadge';
+import { ExportButton } from '@/components/exports/ExportButton';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -72,15 +73,18 @@ export default function QuotesListPage() {
             Manage quotes for customers across their lifecycle.
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/quotes/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-quote-link"
-          >
-            New quote
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="quotes" />
+          {canWrite && (
+            <Link
+              to="/quotes/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-quote-link"
+            >
+              New quote
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

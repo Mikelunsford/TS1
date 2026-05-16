@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -70,15 +71,18 @@ export default function ProjectsListPage() {
             Production jobs converted from quotes or created directly.
           </p>
         </div>
-        {canCreate && (
-          <Link
-            to="/projects/new"
-            className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="projects-new-link"
-          >
-            New project
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="projects" />
+          {canCreate && (
+            <Link
+              to="/projects/new"
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="projects-new-link"
+            >
+              New project
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

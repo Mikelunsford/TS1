@@ -1,7 +1,9 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
+import { ImportWizard } from '@/components/imports/ImportWizard';
 import { ItemCategoryPicker } from '@/components/inventory/ItemCategoryPicker';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { Badge } from '@/components/ui/Badge';
@@ -26,6 +28,8 @@ export default function ItemsListPage() {
   // Local input state so typing doesn't re-fetch on every keystroke; commit on
   // submit. Same convention as CustomersListPage.
   const [qInput, setQInput] = useState(q);
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const filters: ItemListFilters = {};
   if (q) filters.q = q;
@@ -60,13 +64,30 @@ export default function ItemsListPage() {
             Products, services, labor, and other line-item building blocks.
           </p>
         </div>
-        <Link
-          to="/items/categories"
-          className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
-        >
-          Manage categories
-        </Link>
+        <div className="flex items-center gap-2">
+          <ExportButton entity="items" />
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
+            data-testid="open-item-import"
+          >
+            Import
+          </button>
+          <Link
+            to="/items/categories"
+            className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
+          >
+            Manage categories
+          </Link>
+        </div>
       </header>
+      <ImportWizard
+        entity="items"
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onCommitted={() => queryClient.invalidateQueries({ queryKey: itemKeys.list() })}
+      />
 
       <form
         className="flex flex-wrap items-end gap-3"

@@ -4,10 +4,12 @@
  *
  * Wave 7 / Phase 10. See TS1/09-api/00-API-CONTRACT.md §10.
  */
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
+import { ImportWizard } from '@/components/imports/ImportWizard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -23,6 +25,8 @@ export default function VendorListPage() {
   const cursor = searchParams.get('cursor') ?? undefined;
 
   const [qInput, setQInput] = useState(q);
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
   const { can } = useCapabilities();
   const canWrite = can('vendors.write');
 
@@ -55,16 +59,35 @@ export default function VendorListPage() {
           <h1 className="text-2xl font-semibold">Vendors</h1>
           <p className="text-sm text-fg-muted">Suppliers you purchase from.</p>
         </div>
-        {canWrite && (
-          <Link
-            to="/vendors/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-vendor-link"
-          >
-            New vendor
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="vendors" />
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
+              data-testid="open-vendor-import"
+            >
+              Import
+            </button>
+          )}
+          {canWrite && (
+            <Link
+              to="/vendors/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-vendor-link"
+            >
+              New vendor
+            </Link>
+          )}
+        </div>
       </header>
+      <ImportWizard
+        entity="vendors"
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onCommitted={() => queryClient.invalidateQueries({ queryKey: vendorKeys.all })}
+      />
 
       <form
         className="flex flex-wrap items-end gap-3"

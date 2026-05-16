@@ -1,7 +1,9 @@
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
+import { ImportWizard } from '@/components/imports/ImportWizard';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -35,6 +37,8 @@ export default function CustomersListPage() {
   // Local input state so typing doesn't re-fetch on every keystroke; commit
   // on submit. Derived-state-free per the constitution.
   const [qInput, setQInput] = useState(q);
+  const [importOpen, setImportOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const queryParams: { q?: string; status?: string; cursor?: string } = {};
   if (q) queryParams.q = q;
@@ -60,12 +64,31 @@ export default function CustomersListPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-6 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Customers</h1>
-        <p className="text-sm text-fg-muted">
-          Companies and individuals you sell to. Filter, search, and drill in.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">Customers</h1>
+          <p className="text-sm text-fg-muted">
+            Companies and individuals you sell to. Filter, search, and drill in.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ExportButton entity="customers" />
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
+            data-testid="open-customer-import"
+          >
+            Import
+          </button>
+        </div>
       </header>
+      <ImportWizard
+        entity="customers"
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onCommitted={() => queryClient.invalidateQueries({ queryKey: customerKeys.all })}
+      />
 
       <form
         className="flex flex-wrap items-end gap-3"

@@ -5,6 +5,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { ReceivingOrderStatusBadge } from '@/components/ops/ReceivingOrderStatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -60,15 +61,18 @@ export default function ReceivingOrderListPage() {
             Inbound material receipts (customer-supplied or T1-purchased).
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/receiving/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-ro-link"
-          >
-            New receiving order
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="receiving_orders" />
+          {canWrite && (
+            <Link
+              to="/receiving/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-ro-link"
+            >
+              New receiving order
+            </Link>
+          )}
+        </div>
       </header>
 
       <section className="flex flex-wrap items-end gap-3" aria-label="Filters">

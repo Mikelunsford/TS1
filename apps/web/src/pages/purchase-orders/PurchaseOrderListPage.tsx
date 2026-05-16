@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { PurchaseOrderStatusBadge } from '@/components/procurement/PurchaseOrderStatusBadge';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -82,15 +83,19 @@ export default function PurchaseOrderListPage() {
           <h1 className="text-2xl font-semibold">Purchase orders</h1>
           <p className="text-sm text-fg-muted">Procurement workflow.</p>
         </div>
-        {canWrite && (
-          <Link
-            to="/purchase-orders/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-po-link"
-          >
-            New PO
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="purchase_orders" />
+          <ExportButton entity="purchase_orders" label="Export with lines" params={{ expand: 'lines' }} />
+          {canWrite && (
+            <Link
+              to="/purchase-orders/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-po-link"
+            >
+              New PO
+            </Link>
+          )}
+        </div>
       </header>
 
       <form
