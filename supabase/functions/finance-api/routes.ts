@@ -72,8 +72,13 @@ import {
   reopenPeriodClose,
 } from './handlers/period-close.ts';
 import {
+  getArAging,
   getBalanceSheet,
+  getCashPosition,
+  getExpenseByCategory,
   getProfitLoss,
+  getSalesByCustomer,
+  getSalesByItem,
   getTrialBalance,
 } from './handlers/reports.ts';
 
@@ -152,4 +157,12 @@ export const routes: Route[] = [
   { method: 'GET', path: '/reports/trial-balance', handler: getTrialBalance },
   { method: 'GET', path: '/reports/profit-loss', handler: getProfitLoss },
   { method: 'GET', path: '/reports/balance-sheet', handler: getBalanceSheet },
+
+  // Reports polish (Wave 10) — A1 owns this block.
+  { method: 'GET', path: '/reports/ar-aging', handler: getArAging },
+  { method: 'GET', path: '/reports/sales-by-customer', handler: getSalesByCustomer },
+  { method: 'GET', path: '/reports/sales-by-item', handler: getSalesByItem },
+  { method: 'GET', path: '/reports/cash-position', handler: getCashPosition },
+  { method: 'GET', path: '/reports/expense-by-category', handler: getExpenseByCategory },
+  // End Reports polish (Wave 10).
 ];

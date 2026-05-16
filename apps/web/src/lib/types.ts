@@ -2560,3 +2560,184 @@ export const BalanceSheetReportSchema = z.object({
   is_balanced: z.boolean(),
 });
 export type BalanceSheetReport = z.infer<typeof BalanceSheetReportSchema>;
+
+// =========================================================================
+// Wave 10 / Phase 18 polish — extended reports + dashboard KPIs.
+// Wave10-A1 owns this block. SECURITY DEFINER RPCs ar_aging,
+// sales_by_customer, sales_by_item, cash_position, expense_by_category
+// ship in migration 0067 (Agent A3). Wire envelopes mirror the Wave 8e
+// {trial-balance, profit-loss, balance-sheet} shape: `{ ok: true, data:
+// { ...filters, rows, totals } }`.
+// =========================================================================
+
+// ---- AR aging report ----
+
+export const ArAgingQuerySchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type ArAgingQuery = z.infer<typeof ArAgingQuerySchema>;
+
+export const ArAgingRowSchema = z.object({
+  customer_id: UuidSchema,
+  customer_name: z.string(),
+  current_cents: z.number().int(),
+  days_1_30_cents: z.number().int(),
+  days_31_60_cents: z.number().int(),
+  days_61_90_cents: z.number().int(),
+  days_over_90_cents: z.number().int(),
+  total_cents: z.number().int(),
+});
+export type ArAgingRow = z.infer<typeof ArAgingRowSchema>;
+
+export const ArAgingReportSchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string(),
+  rows: z.array(ArAgingRowSchema),
+  total_current_cents: z.number().int(),
+  total_days_1_30_cents: z.number().int(),
+  total_days_31_60_cents: z.number().int(),
+  total_days_61_90_cents: z.number().int(),
+  total_days_over_90_cents: z.number().int(),
+  total_outstanding_cents: z.number().int(),
+});
+export type ArAgingReport = z.infer<typeof ArAgingReportSchema>;
+
+// ---- Sales-by-customer report ----
+
+export const SalesByCustomerQuerySchema = z.object({
+  start: z.string().date(),
+  end: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type SalesByCustomerQuery = z.infer<typeof SalesByCustomerQuerySchema>;
+
+export const SalesByCustomerRowSchema = z.object({
+  customer_id: UuidSchema,
+  customer_name: z.string(),
+  invoice_count: z.number().int(),
+  subtotal_cents: z.number().int(),
+  tax_cents: z.number().int(),
+  total_cents: z.number().int(),
+});
+export type SalesByCustomerRow = z.infer<typeof SalesByCustomerRowSchema>;
+
+export const SalesByCustomerReportSchema = z.object({
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  currency: z.string(),
+  rows: z.array(SalesByCustomerRowSchema),
+  total_invoice_count: z.number().int(),
+  total_subtotal_cents: z.number().int(),
+  total_tax_cents: z.number().int(),
+  total_sales_cents: z.number().int(),
+});
+export type SalesByCustomerReport = z.infer<typeof SalesByCustomerReportSchema>;
+
+// ---- Sales-by-item report ----
+
+export const SalesByItemQuerySchema = z.object({
+  start: z.string().date(),
+  end: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type SalesByItemQuery = z.infer<typeof SalesByItemQuerySchema>;
+
+export const SalesByItemRowSchema = z.object({
+  item_id: UuidSchema.nullable(),
+  item_code: z.string().nullable(),
+  item_name: z.string(),
+  quantity: z.number(),
+  subtotal_cents: z.number().int(),
+  total_cents: z.number().int(),
+});
+export type SalesByItemRow = z.infer<typeof SalesByItemRowSchema>;
+
+export const SalesByItemReportSchema = z.object({
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  currency: z.string(),
+  rows: z.array(SalesByItemRowSchema),
+  total_quantity: z.number(),
+  total_subtotal_cents: z.number().int(),
+  total_sales_cents: z.number().int(),
+});
+export type SalesByItemReport = z.infer<typeof SalesByItemReportSchema>;
+
+// ---- Cash-position report ----
+
+export const CashPositionQuerySchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type CashPositionQuery = z.infer<typeof CashPositionQuerySchema>;
+
+export const CashPositionRowSchema = z.object({
+  account_id: UuidSchema,
+  account_code: z.string(),
+  account_name: z.string(),
+  balance_cents: z.number().int(),
+});
+export type CashPositionRow = z.infer<typeof CashPositionRowSchema>;
+
+export const CashPositionReportSchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string(),
+  rows: z.array(CashPositionRowSchema),
+  total_cash_cents: z.number().int(),
+});
+export type CashPositionReport = z.infer<typeof CashPositionReportSchema>;
+
+// ---- Expense-by-category report ----
+
+export const ExpenseByCategoryQuerySchema = z.object({
+  start: z.string().date(),
+  end: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type ExpenseByCategoryQuery = z.infer<typeof ExpenseByCategoryQuerySchema>;
+
+export const ExpenseByCategoryRowSchema = z.object({
+  category_id: UuidSchema.nullable(),
+  category_name: z.string(),
+  expense_count: z.number().int(),
+  total_cents: z.number().int(),
+});
+export type ExpenseByCategoryRow = z.infer<typeof ExpenseByCategoryRowSchema>;
+
+export const ExpenseByCategoryReportSchema = z.object({
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  currency: z.string(),
+  rows: z.array(ExpenseByCategoryRowSchema),
+  total_expense_count: z.number().int(),
+  total_expenses_cents: z.number().int(),
+});
+export type ExpenseByCategoryReport = z.infer<typeof ExpenseByCategoryReportSchema>;
+
+// ---- Dashboard summary (Wave 10) ----
+
+export const DashboardArAgingSummarySchema = z.object({
+  current_cents: z.number().int(),
+  days_1_30_cents: z.number().int(),
+  days_31_60_cents: z.number().int(),
+  days_61_90_cents: z.number().int(),
+  days_over_90_cents: z.number().int(),
+});
+export type DashboardArAgingSummary = z.infer<typeof DashboardArAgingSummarySchema>;
+
+export const DashboardSummarySchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string(),
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  ar_aging_summary: DashboardArAgingSummarySchema,
+  cash_on_hand_cents: z.number().int(),
+  mtd_revenue_cents: z.number().int(),
+  mtd_expense_cents: z.number().int(),
+});
+export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
+
+// =========================================================================
+// End Wave 10 / Phase 18 polish block.
+// =========================================================================
