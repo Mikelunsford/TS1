@@ -35,6 +35,18 @@ describe('workflow parity (apps/web/src/lib/workflow.ts ↔ supabase/functions/_
     expect(shared.CREDIT_NOTE_TRANSITIONS).toEqual(spa.CREDIT_NOTE_TRANSITIONS);
   });
 
+  it('PURCHASE_ORDER_TRANSITIONS is identical', () => {
+    expect(shared.PURCHASE_ORDER_TRANSITIONS).toEqual(spa.PURCHASE_ORDER_TRANSITIONS);
+  });
+
+  it('VENDOR_BILL_TRANSITIONS is identical', () => {
+    expect(shared.VENDOR_BILL_TRANSITIONS).toEqual(spa.VENDOR_BILL_TRANSITIONS);
+  });
+
+  it('EXPENSE_TRANSITIONS is identical', () => {
+    expect(shared.EXPENSE_TRANSITIONS).toEqual(spa.EXPENSE_TRANSITIONS);
+  });
+
   it('canTransition agrees on every (machine, from, to) tuple in the union', () => {
     const matrices = [
       ['quote', spa.QUOTE_TRANSITIONS],
@@ -42,6 +54,9 @@ describe('workflow parity (apps/web/src/lib/workflow.ts ↔ supabase/functions/_
       ['phase', spa.PHASE_TRANSITIONS],
       ['invoice', spa.INVOICE_TRANSITIONS],
       ['credit_note', spa.CREDIT_NOTE_TRANSITIONS],
+      ['purchase_order', spa.PURCHASE_ORDER_TRANSITIONS],
+      ['vendor_bill', spa.VENDOR_BILL_TRANSITIONS],
+      ['expense', spa.EXPENSE_TRANSITIONS],
     ] as const;
     for (const [machine, matrix] of matrices) {
       const states = Object.keys(matrix);
