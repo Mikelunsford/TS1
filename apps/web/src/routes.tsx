@@ -2,6 +2,9 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './auth/ProtectedRoute';
+// Phase 22 vendor portal routing (Wave 10 Session 4) — C2 owns this block.
+import { VendorPortalRoute } from './auth/VendorPortalRoute';
+// End Phase 22 vendor portal routing (Wave 10 Session 4).
 // Phase 23 admin guard (Wave 10 Session 4) — C3 owns this block.
 import { AdminProtectedRoute } from './auth/AdminProtectedRoute';
 // End Phase 23 admin guard (Wave 10 Session 4).
@@ -118,6 +121,42 @@ const SalesByItemReportPage = lazy(() => import('./pages/reports/SalesByItemRepo
 const CashPositionReportPage = lazy(() => import('./pages/reports/CashPositionReportPage'));
 const ExpenseByCategoryReportPage = lazy(() => import('./pages/reports/ExpenseByCategoryReportPage'));
 // End Reports polish (Wave 10).
+
+// Customer portal (Phase 21 / Wave 10 Session 4) — C1 owns this block.
+const PortalDashboardPage = lazy(() => import('./pages/portal/PortalDashboardPage'));
+const PortalInvoicesPage = lazy(() => import('./pages/portal/PortalInvoicesPage'));
+const PortalInvoiceDetailPage = lazy(() => import('./pages/portal/PortalInvoiceDetailPage'));
+const PortalQuotesPage = lazy(() => import('./pages/portal/PortalQuotesPage'));
+const PortalQuoteDetailPage = lazy(() => import('./pages/portal/PortalQuoteDetailPage'));
+const PortalProjectsPage = lazy(() => import('./pages/portal/PortalProjectsPage'));
+const PortalProjectDetailPage = lazy(() => import('./pages/portal/PortalProjectDetailPage'));
+const PortalPaymentsPage = lazy(() => import('./pages/portal/PortalPaymentsPage'));
+const PortalStatementPage = lazy(() => import('./pages/portal/PortalStatementPage'));
+// End Phase 21 portal lazy.
+
+// Phase 22 vendor portal pages (Wave 10 Session 4) — C2 owns this block.
+const VendorPortalDashboardPage = lazy(
+  () => import('./pages/vendor-portal/VendorPortalDashboardPage'),
+);
+const VendorPortalPurchaseOrdersPage = lazy(
+  () => import('./pages/vendor-portal/PurchaseOrdersPage'),
+);
+const VendorPortalPurchaseOrderDetailPage = lazy(
+  () => import('./pages/vendor-portal/PurchaseOrderDetailPage'),
+);
+const VendorPortalVendorBillsPage = lazy(
+  () => import('./pages/vendor-portal/VendorBillsPage'),
+);
+const VendorPortalVendorBillDetailPage = lazy(
+  () => import('./pages/vendor-portal/VendorBillDetailPage'),
+);
+const VendorPortalPaymentsPage = lazy(
+  () => import('./pages/vendor-portal/PaymentsPage'),
+);
+const VendorPortalStatementPage = lazy(
+  () => import('./pages/vendor-portal/StatementPage'),
+);
+// End Phase 22 vendor portal pages (Wave 10 Session 4).
 
 // Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block.
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
@@ -767,6 +806,141 @@ export function AppRoutes() {
           }
         />
         {/* End Reports polish (Wave 10). */}
+
+        {/* Phase 21 portal routing (Wave 10 Session 4) — C1 owns this block. */}
+        <Route
+          path="/portal"
+          element={
+            <ProtectedRoute>
+              <PortalDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/invoices"
+          element={
+            <ProtectedRoute>
+              <PortalInvoicesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/invoices/:id"
+          element={
+            <ProtectedRoute>
+              <PortalInvoiceDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/quotes"
+          element={
+            <ProtectedRoute>
+              <PortalQuotesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/quotes/:id"
+          element={
+            <ProtectedRoute>
+              <PortalQuoteDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/projects"
+          element={
+            <ProtectedRoute>
+              <PortalProjectsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/projects/:id"
+          element={
+            <ProtectedRoute>
+              <PortalProjectDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/payments"
+          element={
+            <ProtectedRoute>
+              <PortalPaymentsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/portal/statement"
+          element={
+            <ProtectedRoute>
+              <PortalStatementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* End Phase 21 portal routing (Wave 10 Session 4). */}
+
+        {/* Phase 22 vendor portal routes (Wave 10 Session 4) — C2 owns this block. */}
+        <Route
+          path="/vendor-portal"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalDashboardPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/purchase-orders"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPurchaseOrdersPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/purchase-orders/:id"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPurchaseOrderDetailPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/vendor-bills"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalVendorBillsPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/vendor-bills/:id"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalVendorBillDetailPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/payments"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPaymentsPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/statement"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalStatementPage />
+            </VendorPortalRoute>
+          }
+        />
+        {/* End Phase 22 vendor portal routes (Wave 10 Session 4). */}
+
         {/* Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block. */}
         {/* AdminShell handles its own layout (slate-themed, separate from AppShell)
             + client-side platform-admin gate via useIsPlatformAdmin. We use

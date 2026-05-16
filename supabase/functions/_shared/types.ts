@@ -43,6 +43,9 @@ export const RoleSchema = z.enum([
   'accounting',
   'viewer',
   'customer_user',
+  // Phase 22 (Wave 10 Session 4) — C2 owns this entry.
+  'vendor_user',
+  // End Phase 22 (Wave 10 Session 4).
 ]);
 export type Role = z.infer<typeof RoleSchema>;
 
