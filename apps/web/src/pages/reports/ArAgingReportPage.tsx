@@ -81,7 +81,7 @@ export default function ArAgingReportPage() {
             Outstanding receivables by customer, bucketed by days past due as of the selected date.
           </p>
         </div>
-        <ReportExportButton reportKey="ar-aging" />
+        <ReportExportButton reportKey="ar-aging" params={{ as_of: asOf, currency }} />
       </header>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-muted/30 px-3 py-2">

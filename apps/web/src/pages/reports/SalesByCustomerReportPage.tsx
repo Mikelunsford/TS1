@@ -69,7 +69,7 @@ export default function SalesByCustomerReportPage() {
             Posted invoices grouped by customer within the selected date range.
           </p>
         </div>
-        <ReportExportButton reportKey="sales-by-customer" />
+        <ReportExportButton reportKey="sales-by-customer" params={{ start: range.start, end: range.end, currency }} />
       </header>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-muted/30 px-3 py-2">

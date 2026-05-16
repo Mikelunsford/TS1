@@ -131,13 +131,83 @@ export async function createAttachment({ req }: Ctx): Promise<Response> {
       throw new ApiError('INTERNAL_ERROR', 'attachment insert failed', 500, { detail: error.message });
     }
 
-    // Emit attachment.added notification — to the uploader's-org "everyone"
-    // is too noisy at scale; for Phase 16 we only notify when the entity has
-    // an assignee column. Defer cross-entity assignee lookup to Phase 19; for
-    // now we don't emit (notifications still work via mentions / replies).
+    // Phase 19 (Wave 10 Session 3) — R-W10-S2-B1-OBS-01 close-out.
+    // Emit attachment.added notification to the entity's owner/assignee
+    // (or creator as fallback). Skip if recipient = uploader (don't
+    // self-notify). Best-effort — failure does not roll back the upload.
+    try {
+      const recipient = await resolveAttachmentRecipient(sb, body.entity_type, body.entity_id);
+      if (recipient && recipient !== caller.userId) {
+        await sb.from('notifications').insert({
+          org_id: caller.orgId,
+          event_type: 'attachment.added',
+          recipient_user_id: recipient,
+          channel: 'in_app',
+          entity_type: body.entity_type,
+          entity_id: body.entity_id,
+          actor_user_id: caller.userId,
+          payload: {
+            attachment_id: (data as { id?: string } | null)?.id,
+            file_name: body.file_name,
+          },
+        });
+      }
+    } catch (_e) {
+      // Swallow — attachment created, notification is best-effort.
+    }
+    // End Phase 19 (Wave 10 Session 3).
+
     return { status: 201, body: { data } };
   });
 }
+
+// Phase 19 (Wave 10 Session 3) — owns this block.
+/**
+ * Resolve who to notify when an attachment is added to `entity_type/entity_id`.
+ * Returns the recipient_user_id or null if no plausible recipient exists.
+ *
+ * Entities with an explicit assignee field are notified there. Entities
+ * without one fall back to `created_by`. Customer/contact/vendor/item are
+ * record-shaped (no single owner) — skip emission entirely for those.
+ */
+async function resolveAttachmentRecipient(
+  sb: ReturnType<typeof admin>,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  // Tables keyed by the same shape: pick `assigned_to ?? owner_user_id ?? created_by`.
+  const ASSIGNEE_BY_ENTITY: Record<string, { table: string; col: string }[]> = {
+    lead:             [{ table: 'leads',           col: 'assigned_to' }, { table: 'leads',           col: 'created_by' }],
+    opportunity:      [{ table: 'opportunities',   col: 'owner_user_id' }, { table: 'opportunities', col: 'created_by' }],
+    quote:            [{ table: 'quotes',          col: 'owner_user_id' }, { table: 'quotes',          col: 'created_by' }],
+    project:          [{ table: 'projects',        col: 'owner_user_id' }, { table: 'projects',        col: 'created_by' }],
+    invoice:          [{ table: 'invoices',        col: 'created_by' }],
+    payment:          [{ table: 'payments',        col: 'created_by' }],
+    credit_note:      [{ table: 'credit_notes',    col: 'created_by' }],
+    expense:          [{ table: 'expenses',        col: 'submitted_by' }, { table: 'expenses',        col: 'created_by' }],
+    purchase_order:   [{ table: 'purchase_orders', col: 'created_by' }],
+    vendor_bill:      [{ table: 'vendor_bills',    col: 'created_by' }],
+    journal_entry:    [{ table: 'journal_entries', col: 'created_by' }],
+    receiving_order:  [{ table: 'receiving_orders', col: 'created_by' }],
+    production_run:   [{ table: 'production_runs', col: 'created_by' }],
+    shipment:         [{ table: 'shipments',       col: 'created_by' }],
+  };
+  const tries = ASSIGNEE_BY_ENTITY[entityType];
+  if (!tries) return null;
+
+  for (const t of tries) {
+    try {
+      const { data, error } = await sb.from(t.table).select(t.col).eq('id', entityId).maybeSingle();
+      if (error) continue;
+      const v = (data as Record<string, unknown> | null)?.[t.col];
+      if (typeof v === 'string' && v.length > 0) return v;
+    } catch {
+      // Column may not exist on every table; fall through.
+    }
+  }
+  return null;
+}
+// End Phase 19 (Wave 10 Session 3).
 
 export async function signDownload({ req, params }: Ctx): Promise<Response> {
   const caller = requireCaller(req);

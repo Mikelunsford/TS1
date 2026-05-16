@@ -48,10 +48,24 @@ jobs:
       - name: Set runtime secrets (idempotent)
         # SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY are
         # auto-injected by the platform; we only need the custom ones.
+        # Phase 19 (Wave 10 Session 3) — owns this block.
+        # Email providers + notifications-worker shared secret. Only the
+        # provider whose key is set (RESEND/POSTMARK/SENDGRID/SMTP) actually
+        # sends; the others are present-or-empty so the orchestrator can
+        # flip providers without re-editing the workflow.
         run: |
           supabase secrets set \
             ALLOWED_ORIGINS="${{ secrets.ALLOWED_ORIGINS }}" \
+            NOTIFICATIONS_WORKER_SECRET="${{ secrets.NOTIFICATIONS_WORKER_SECRET }}" \
+            RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}" \
+            POSTMARK_API_KEY="${{ secrets.POSTMARK_API_KEY }}" \
+            SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
+            SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+            SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+            SMTP_USER="${{ secrets.SMTP_USER }}" \
+            SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}" \
             --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+        # End Phase 19 (Wave 10 Session 3).
 
       - name: Deploy each bundle
         run: |
@@ -77,6 +91,10 @@ jobs:
             # Wave 10 Session 2 — B2 (Phase 17 search-api)
             search-api
             # End Wave 10 Session 2 B2
+            # Phase 19 (Wave 10 Session 3) — owns this block.
+            pdf-worker
+            notifications-worker
+            # End Phase 19 (Wave 10 Session 3).
           )
           for bundle in "${BUNDLES[@]}"; do
             echo "==> Deploying $bundle"

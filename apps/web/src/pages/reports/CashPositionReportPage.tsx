@@ -52,7 +52,7 @@ export default function CashPositionReportPage() {
             Cash and bank account balances as of the selected date.
           </p>
         </div>
-        <ReportExportButton reportKey="cash-position" />
+        <ReportExportButton reportKey="cash-position" params={{ as_of: asOf, currency }} />
       </header>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-border bg-bg-muted/30 px-3 py-2">
