@@ -17,7 +17,7 @@ import type { Role } from './types';
 
 const READ_SUFFIX = /\.(read)$/;
 const WRITE_FAMILY =
-  /\.(write|approve|convert|send|close|void|cancel|post|reverse|refund|issue|apply|submit|invite|role_change|pay|receive)$/;
+  /\.(write|approve|convert|send|close|void|cancel|post|reverse|refund|issue|apply|submit|invite|role_change|pay|receive|create|update|reopen)$/;
 
 /**
  * Returns true if `role` is allowed `cap`. Mirrors `allow()` in

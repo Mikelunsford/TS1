@@ -151,6 +151,26 @@ export type ProductionRunState = 'scheduled' | 'in_progress' | 'completed' | 'ca
 export type ShipmentState = 'scheduled' | 'loading' | 'shipped' | 'cancelled';
 
 /**
+ * Period close state — Wave 8e / Phase 18. Backed by the
+ * `period_close_state` pg enum on prod (verified 2026-05-16,
+ * post-0062 schema_migrations=0062). Lifecycle:
+ *
+ *   open -> in_review -> closed
+ *
+ * `open` ↔ `in_review` is bidirectional (an in-review period can be
+ * sent back to open for late-arriving entries before a close commit).
+ * `closed -> reopened` is the only legal exit from terminal `closed`,
+ * and a reopened period flows back through `in_review` before it can
+ * be closed again (audit trail + double-confirmation).
+ *
+ * The /close + /reopen endpoints hit dedicated RPCs (close_period,
+ * reopen_period) rather than a generic state-stamp PATCH because both
+ * carry side-effects (draft-JE preflight, stamped audit markers).
+ * The state-stamp PATCH handles the open ↔ in_review back-edit only.
+ */
+export type PeriodCloseState = 'open' | 'in_review' | 'closed' | 'reopened';
+
+/**
  * Quote transitions matrix. Every (from -> to) listed here is a legal real
  * state change. Endpoints whose semantics are timestamp/activity-only (send,
  * accept) DO NOT appear here; the handler stamps state_changed_at + emits an
@@ -329,6 +349,22 @@ export const SHIPMENT_TRANSITIONS: Record<ShipmentState, readonly ShipmentState[
   cancelled: [],
 };
 
+/**
+ * Period close transitions (Wave 8e / Phase 18). Lifecycle:
+ *   open -> in_review -> closed.
+ * `open` ↔ `in_review` is bidirectional. `closed -> reopened` is the
+ * only legal exit from closed (only via the /reopen endpoint, which
+ * calls reopen_period). A `reopened` row re-enters the cycle through
+ * `in_review`. Stamping the row from `closed` back to a non-reopened
+ * state is illegal — the audit trail demands the reopened intermediate.
+ */
+export const PERIOD_CLOSE_TRANSITIONS: Record<PeriodCloseState, readonly PeriodCloseState[]> = {
+  open: ['in_review'],
+  in_review: ['open', 'closed'],
+  closed: ['reopened'],
+  reopened: ['in_review'],
+};
+
 export type WorkflowMachine =
   | 'quote'
   | 'project'
@@ -341,7 +377,8 @@ export type WorkflowMachine =
   | 'journal_entry'
   | 'receiving_order'
   | 'production_run'
-  | 'shipment';
+  | 'shipment'
+  | 'period_close';
 
 type Matrix = Record<string, readonly string[]>;
 
@@ -371,6 +408,8 @@ function getMatrix(machine: WorkflowMachine): Matrix {
       return PRODUCTION_RUN_TRANSITIONS as Matrix;
     case 'shipment':
       return SHIPMENT_TRANSITIONS as Matrix;
+    case 'period_close':
+      return PERIOD_CLOSE_TRANSITIONS as Matrix;
   }
 }
 

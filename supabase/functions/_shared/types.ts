@@ -2414,3 +2414,149 @@ export const ShipmentCancelSchema = z.object({
   cancellation_reason: z.string().min(1).max(2000).optional(),
 }).strict();
 export type ShipmentCancel = z.infer<typeof ShipmentCancelSchema>;
+
+// ============================================================================
+// Wave 8e / Phase 18 — Period close + financial reports.
+// ============================================================================
+//
+// public.period_close lives on prod from migration 0062. status uses the
+// `period_close_state` pg enum (open / in_review / closed / reopened).
+// The /close + /reopen endpoints invoke dedicated RPCs (close_period,
+// reopen_period); the state-stamp PATCH only handles open ↔ in_review.
+
+export const PeriodCloseStateSchema = z.enum([
+  'open', 'in_review', 'closed', 'reopened',
+]);
+export type PeriodCloseStateZ = z.infer<typeof PeriodCloseStateSchema>;
+
+export const PeriodCloseSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  status: PeriodCloseStateSchema,
+  closed_at: TimestampSchema.nullable(),
+  closed_by_user_id: UuidSchema.nullable(),
+  reopened_at: TimestampSchema.nullable(),
+  reopened_by_user_id: UuidSchema.nullable(),
+  notes: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type PeriodClose = z.infer<typeof PeriodCloseSchema>;
+
+/** POST /period-closes — open a new period_close row at status='open'. */
+export const PeriodCloseCreateInputSchema = z.object({
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type PeriodCloseCreateInput = z.infer<typeof PeriodCloseCreateInputSchema>;
+
+/** PATCH /period-closes/:id — state stamp (open <-> in_review) + notes. */
+export const PeriodClosePatchInputSchema = z.object({
+  status: z.enum(['open', 'in_review']).optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type PeriodClosePatchInput = z.infer<typeof PeriodClosePatchInputSchema>;
+
+/** POST /period-closes/:id/close — body carries optional close notes. */
+export const PeriodCloseClosePayloadSchema = z.object({
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type PeriodCloseClosePayload = z.infer<typeof PeriodCloseClosePayloadSchema>;
+
+/** POST /period-closes/:id/reopen — reason REQUIRED for audit. */
+export const PeriodCloseReopenPayloadSchema = z.object({
+  reason: z.string().min(1).max(2000),
+}).strict();
+export type PeriodCloseReopenPayload = z.infer<typeof PeriodCloseReopenPayloadSchema>;
+
+// ---- Reports: query inputs ----
+
+export const TrialBalanceQuerySchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type TrialBalanceQuery = z.infer<typeof TrialBalanceQuerySchema>;
+
+export const ProfitLossQuerySchema = z.object({
+  start: z.string().date(),
+  end: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type ProfitLossQuery = z.infer<typeof ProfitLossQuerySchema>;
+
+export const BalanceSheetQuerySchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string().min(3).max(3).default('USD'),
+}).strict();
+export type BalanceSheetQuery = z.infer<typeof BalanceSheetQuerySchema>;
+
+// ---- Reports: row outputs ----
+
+export const TrialBalanceRowSchema = z.object({
+  account_id: UuidSchema,
+  account_code: z.string(),
+  account_name: z.string(),
+  account_type: z.string(),
+  debit_total_cents: z.number().int(),
+  credit_total_cents: z.number().int(),
+  balance_cents: z.number().int(),
+});
+export type TrialBalanceRow = z.infer<typeof TrialBalanceRowSchema>;
+
+export const TrialBalanceReportSchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string(),
+  rows: z.array(TrialBalanceRowSchema),
+  total_debit_cents: z.number().int(),
+  total_credit_cents: z.number().int(),
+  is_balanced: z.boolean(),
+});
+export type TrialBalanceReport = z.infer<typeof TrialBalanceReportSchema>;
+
+export const ProfitLossRowSchema = z.object({
+  account_id: UuidSchema.nullable(),
+  account_code: z.string(),
+  account_name: z.string(),
+  account_type: z.string(),
+  revenue_cents: z.number().int(),
+  expense_cents: z.number().int(),
+  net_income_cents: z.number().int(),
+  is_total: z.boolean(),
+});
+export type ProfitLossRow = z.infer<typeof ProfitLossRowSchema>;
+
+export const ProfitLossReportSchema = z.object({
+  period_start: z.string().date(),
+  period_end: z.string().date(),
+  currency: z.string(),
+  rows: z.array(ProfitLossRowSchema),
+  total_revenue_cents: z.number().int(),
+  total_expense_cents: z.number().int(),
+  net_income_cents: z.number().int(),
+});
+export type ProfitLossReport = z.infer<typeof ProfitLossReportSchema>;
+
+export const BalanceSheetRowSchema = z.object({
+  account_id: UuidSchema.nullable(),
+  account_code: z.string(),
+  account_name: z.string(),
+  account_type: z.string(),
+  balance_cents: z.number().int(),
+  is_total: z.boolean(),
+});
+export type BalanceSheetRow = z.infer<typeof BalanceSheetRowSchema>;
+
+export const BalanceSheetReportSchema = z.object({
+  as_of: z.string().date(),
+  currency: z.string(),
+  rows: z.array(BalanceSheetRowSchema),
+  total_assets_cents: z.number().int(),
+  total_liabilities_cents: z.number().int(),
+  total_equity_cents: z.number().int(),
+  retained_earnings_cents: z.number().int(),
+  is_balanced: z.boolean(),
+});
+export type BalanceSheetReport = z.infer<typeof BalanceSheetReportSchema>;

@@ -47,6 +47,10 @@ describe('workflow parity (apps/web/src/lib/workflow.ts ↔ supabase/functions/_
     expect(shared.EXPENSE_TRANSITIONS).toEqual(spa.EXPENSE_TRANSITIONS);
   });
 
+  it('PERIOD_CLOSE_TRANSITIONS is identical', () => {
+    expect(shared.PERIOD_CLOSE_TRANSITIONS).toEqual(spa.PERIOD_CLOSE_TRANSITIONS);
+  });
+
   it('canTransition agrees on every (machine, from, to) tuple in the union', () => {
     const matrices = [
       ['quote', spa.QUOTE_TRANSITIONS],
@@ -57,6 +61,7 @@ describe('workflow parity (apps/web/src/lib/workflow.ts ↔ supabase/functions/_
       ['purchase_order', spa.PURCHASE_ORDER_TRANSITIONS],
       ['vendor_bill', spa.VENDOR_BILL_TRANSITIONS],
       ['expense', spa.EXPENSE_TRANSITIONS],
+      ['period_close', spa.PERIOD_CLOSE_TRANSITIONS],
     ] as const;
     for (const [machine, matrix] of matrices) {
       const states = Object.keys(matrix);

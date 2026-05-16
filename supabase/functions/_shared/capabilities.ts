@@ -112,6 +112,12 @@ export const ALL_CAPABILITIES = [
   'finance.journal_entries.write',
   'finance.journal_entries.post',
   'finance.journal_entries.reverse',
+  'finance.period_close.read',
+  'finance.period_close.create',
+  'finance.period_close.update',
+  'finance.period_close.close',
+  'finance.period_close.reopen',
+  'finance.reports.read',
   'vendors.read',
   'vendors.write',
   'purchase_orders.read',
@@ -157,7 +163,7 @@ export const ALL_CAPABILITIES = [
 export type Capability = (typeof ALL_CAPABILITIES)[number];
 
 const READ_SUFFIX = /\.(read)$/;
-const WRITE_FAMILY = /\.(write|approve|convert|send|close|void|cancel|post|reverse|refund|issue|apply|submit|invite|role_change|pay|receive)$/;
+const WRITE_FAMILY = /\.(write|approve|convert|send|close|void|cancel|post|reverse|refund|issue|apply|submit|invite|role_change|pay|receive|create|update|reopen)$/;
 
 /**
  * Role policy. Returns true if `role` is allowed `cap`. The matrix is built
