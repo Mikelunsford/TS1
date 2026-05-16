@@ -1179,3 +1179,424 @@ export const ProjectPhaseStatusUpdateSchema = z.object({
   status: PhaseStatusSchema,
 });
 export type ProjectPhaseStatusUpdate = z.infer<typeof ProjectPhaseStatusUpdateSchema>;
+
+// =========================================================================
+// Invoicing — workflow enums (Wave 5 / Phase 7)
+// =========================================================================
+
+/**
+ * Invoice state — prod `invoices.status` text CHECK (verified 2026-05-15,
+ * schema_migrations=0052). Nine values; `refunded` and `cancelled` are
+ * terminal.
+ */
+export const InvoiceStateSchema = z.enum([
+  'draft',
+  'pending',
+  'sent',
+  'partially_paid',
+  'paid',
+  'overdue',
+  'refunded',
+  'cancelled',
+  'on_hold',
+]);
+export type InvoiceState = z.infer<typeof InvoiceStateSchema>;
+
+/** Invoice payment status — prod `invoices.payment_status` text CHECK. */
+export const InvoicePaymentStatusSchema = z.enum(['unpaid', 'partially_paid', 'paid']);
+export type InvoicePaymentStatus = z.infer<typeof InvoicePaymentStatusSchema>;
+
+/**
+ * Invoice recurring cadence — prod `invoices.recurring` text CHECK
+ * (nullable; non-recurring rows leave the column NULL).
+ */
+export const InvoiceRecurringSchema = z.enum([
+  'daily',
+  'weekly',
+  'monthly',
+  'quarterly',
+  'annually',
+]);
+export type InvoiceRecurring = z.infer<typeof InvoiceRecurringSchema>;
+
+/**
+ * Credit note state — prod `credit_notes.status` text CHECK. Four values;
+ * `voided` is terminal.
+ */
+export const CreditNoteStatusSchema = z.enum(['draft', 'issued', 'applied', 'voided']);
+export type CreditNoteStatus = z.infer<typeof CreditNoteStatusSchema>;
+
+/**
+ * Credit note reason — prod `credit_notes.reason` text CHECK (nullable).
+ * Five values. Used at create time; not the void reason.
+ */
+export const CreditNoteReasonSchema = z.enum([
+  'refund',
+  'adjustment',
+  'write_off',
+  'duplicate',
+  'other',
+]);
+export type CreditNoteReason = z.infer<typeof CreditNoteReasonSchema>;
+
+// =========================================================================
+// Invoicing — Invoices (Wave 5 / Phase 7)
+// =========================================================================
+
+/**
+ * Invoice row. Reflects the prod `public.invoices` shape after migration
+ * 0052. Drifts from API-contract §6 reconciled DB-wins (5.4 docs reconcile):
+ *   - DB column is `customer_name_snapshot` (not `customer_name`).
+ *   - Single `notes` column (no `notes_customer`/`terms`).
+ *   - No `tax_inclusive` column; no per-line `discount_pct` (cents only).
+ *   - `recurring` is a nullable text CHECK on the invoice row itself, not a
+ *     separate recurring-config table.
+ *   - `balance_cents` is bigint NULL populated by the recompute trigger
+ *     (`recompute_invoice_totals` RPC + triggers added in 0052).
+ *   - Lifecycle stamps: `sent_at`, `paid_at`, `cancelled_at`, `pending_at`,
+ *     `on_hold_at`, `state_changed_at`. Handlers update the relevant column
+ *     on each transition (the state-machine audit row is written by the
+ *     `trg_invoices_audit_state` trigger — do NOT insert audit_log rows
+ *     manually).
+ */
+export const InvoiceSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  invoice_number: z.string().min(1),
+  customer_id: UuidSchema,
+  customer_name_snapshot: z.string().min(1),
+  project_id: UuidSchema.nullable(),
+  quote_id: UuidSchema.nullable(),
+  status: InvoiceStateSchema,
+  payment_status: InvoicePaymentStatusSchema,
+  recurring: InvoiceRecurringSchema.nullable(),
+  content: z.string().nullable(),
+  notes: z.string().nullable(),
+  issue_date: z.string(),
+  due_date: z.string(),
+  state_changed_at: TimestampSchema,
+  approved: z.boolean(),
+  is_overdue: z.boolean(),
+  converted_from_type: z.enum(['quote', 'project']).nullable(),
+  converted_from_id: UuidSchema.nullable(),
+  currency_code: z.string().length(3),
+  exchange_rate: z.union([z.number(), z.string()]).nullable(),
+  subtotal_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  total_cents: CentsSchema,
+  paid_cents: CentsSchema,
+  balance_cents: CentsSchema.nullable(),
+  tax_id: UuidSchema.nullable(),
+  tax_rate_snapshot: z.union([z.number(), z.string()]).nullable(),
+  pdf_path: z.string().nullable(),
+  external_ref: z.string().nullable(),
+  sent_at: z.string().nullable(),
+  paid_at: z.string().nullable(),
+  cancelled_at: z.string().nullable(),
+  cancellation_reason: z.string().nullable(),
+  pending_at: z.string().nullable(),
+  on_hold_at: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Invoice = z.infer<typeof InvoiceSchema>;
+
+/**
+ * Request body for `POST /invoicing-api/invoices` (creates a draft).
+ * Required: customer_id, due_date, currency_code. issue_date defaults to
+ * today on the server when omitted.
+ */
+export const InvoiceCreateSchema = z.object({
+  customer_id: UuidSchema,
+  due_date: z.string().date(),
+  currency_code: z.string().length(3),
+  quote_id: UuidSchema.nullable().optional(),
+  project_id: UuidSchema.nullable().optional(),
+  issue_date: z.string().date().optional(),
+  customer_name_snapshot: z.string().min(1).max(200).optional(),
+  notes: z.string().nullable().optional(),
+  content: z.string().nullable().optional(),
+  recurring: InvoiceRecurringSchema.nullable().optional(),
+  exchange_rate: z.number().positive().nullable().optional(),
+  tax_id: UuidSchema.nullable().optional(),
+  tax_rate_snapshot: z.number().min(0).max(1).nullable().optional(),
+  external_ref: z.string().max(120).nullable().optional(),
+});
+export type InvoiceCreate = z.infer<typeof InvoiceCreateSchema>;
+
+/** Patch body for `PATCH /invoicing-api/invoices/:id`. Only allowed while draft. */
+export const InvoicePatchSchema = InvoiceCreateSchema.partial();
+export type InvoicePatch = z.infer<typeof InvoicePatchSchema>;
+
+/** Body shapes for the invoice action endpoints. */
+export const InvoiceSubmitSchema = z.object({}).strict();
+export type InvoiceSubmit = z.infer<typeof InvoiceSubmitSchema>;
+
+export const InvoiceSendSchema = z.object({
+  email: z.string().email().optional(),
+  message: z.string().max(8000).optional(),
+});
+export type InvoiceSend = z.infer<typeof InvoiceSendSchema>;
+
+export const InvoiceVoidSchema = z.object({
+  reason: z.string().min(1).max(2000),
+});
+export type InvoiceVoid = z.infer<typeof InvoiceVoidSchema>;
+
+export const InvoiceHoldSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+export type InvoiceHold = z.infer<typeof InvoiceHoldSchema>;
+
+export const InvoiceReleaseSchema = z.object({
+  reason: z.string().max(2000).optional(),
+});
+export type InvoiceRelease = z.infer<typeof InvoiceReleaseSchema>;
+
+export const InvoiceDuplicateSchema = z.object({}).strict();
+export type InvoiceDuplicate = z.infer<typeof InvoiceDuplicateSchema>;
+
+export const InvoiceConvertFromQuoteSchema = z.object({
+  quote_id: UuidSchema,
+  due_date: z.string().date(),
+});
+export type InvoiceConvertFromQuote = z.infer<typeof InvoiceConvertFromQuoteSchema>;
+
+export const InvoiceConvertFromProjectSchema = z.object({
+  project_id: UuidSchema,
+  due_date: z.string().date(),
+});
+export type InvoiceConvertFromProject = z.infer<typeof InvoiceConvertFromProjectSchema>;
+
+// =========================================================================
+// Invoicing — Invoice Versions (Wave 5)
+// =========================================================================
+
+/**
+ * Invoice version mirror row. Populated by the `create_v1_for_invoice`
+ * AFTER INSERT trigger + `mirror_invoice_to_current_version` AFTER UPDATE
+ * trigger (added in migration 0052).
+ */
+export const InvoiceVersionSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  invoice_id: UuidSchema,
+  version_number: z.number().int().nonnegative(),
+  status: InvoiceStateSchema,
+  payment_status: InvoicePaymentStatusSchema,
+  issue_date: z.string(),
+  due_date: z.string(),
+  notes: z.string().nullable(),
+  currency_code: z.string().length(3),
+  subtotal_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  total_cents: CentsSchema,
+  paid_cents: CentsSchema,
+  created_at: TimestampSchema,
+});
+export type InvoiceVersion = z.infer<typeof InvoiceVersionSchema>;
+
+// =========================================================================
+// Invoicing — Invoice Line Items (Wave 5)
+// =========================================================================
+
+/**
+ * Invoice line row. Mirrors `quote_line_items` shape (prod columns:
+ * `quantity` numeric, `unit` text, `discount_cents`, `tax_amount_cents`,
+ * `tax_rate_snapshot`, `line_total_cents`). Has `updated_at` (the quote
+ * version does not). The DB recompute trigger on AIUD rolls totals up to
+ * the parent invoice automatically — handlers do NOT need to recompute.
+ */
+export const InvoiceLineSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  invoice_id: UuidSchema,
+  invoice_version_id: UuidSchema.nullable(),
+  item_id: UuidSchema.nullable(),
+  description: z.string().min(1),
+  quantity: z.union([z.number(), z.string()]),
+  unit: z.string().nullable(),
+  unit_price_cents: CentsSchema,
+  unit_cost_cents: CentsSchema,
+  discount_cents: CentsSchema,
+  tax_id: UuidSchema.nullable(),
+  tax_rate_snapshot: z.union([z.number(), z.string()]).nullable(),
+  tax_amount_cents: CentsSchema,
+  line_total_cents: CentsSchema,
+  position: z.number().int().nonnegative(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
+
+/** Body for inserting / updating a single invoice line. */
+export const InvoiceLineUpsertSchema = z.object({
+  item_id: UuidSchema.nullable().optional(),
+  description: z.string().min(1).max(500),
+  quantity: z.number().positive(),
+  unit: z.string().max(40).nullable().optional(),
+  unit_price_cents: z.number().int().nonnegative(),
+  unit_cost_cents: z.number().int().nonnegative().default(0),
+  discount_cents: z.number().int().nonnegative().default(0),
+  tax_id: UuidSchema.nullable().optional(),
+  position: z.number().int().nonnegative(),
+});
+export type InvoiceLineUpsert = z.infer<typeof InvoiceLineUpsertSchema>;
+
+/** Bulk-replace body. Parent invoice must be in `draft` state. */
+export const InvoiceLineReplaceSchema = z.object({
+  lines: z.array(InvoiceLineUpsertSchema).max(500),
+});
+export type InvoiceLineReplace = z.infer<typeof InvoiceLineReplaceSchema>;
+
+/** Reorder payload — array of line ids in their new order. */
+export const InvoiceLineReorderSchema = z.object({
+  line_ids: z.array(UuidSchema).min(1).max(500),
+});
+export type InvoiceLineReorder = z.infer<typeof InvoiceLineReorderSchema>;
+
+// =========================================================================
+// Payments (Wave 5 / Phase 8)
+// =========================================================================
+
+/**
+ * Payment row. Reflects the prod `public.payments` shape (verified
+ * 2026-05-15, schema_migrations=0052). `amount_cents > 0` (CHECK
+ * constraint). `voided_at`/`void_reason` stamped by void endpoint. The
+ * recompute trigger handles invoice rollup automatically.
+ */
+export const PaymentSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  payment_number: z.string().min(1),
+  customer_id: UuidSchema,
+  invoice_id: UuidSchema,
+  payment_method_id: UuidSchema.nullable(),
+  paid_at: TimestampSchema,
+  amount_cents: CentsSchema,
+  currency_code: z.string().length(3),
+  exchange_rate: z.union([z.number(), z.string()]).nullable(),
+  reference: z.string().nullable(),
+  description: z.string().nullable(),
+  external_ref: z.string().nullable(),
+  cleared_at: z.string().nullable(),
+  voided_at: z.string().nullable(),
+  void_reason: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Payment = z.infer<typeof PaymentSchema>;
+
+/**
+ * Body for `POST /invoicing-api/payments`. amount_cents must be > 0.
+ * paid_at defaults to server-side now() when omitted.
+ */
+export const PaymentCreateSchema = z.object({
+  customer_id: UuidSchema,
+  invoice_id: UuidSchema,
+  amount_cents: z.number().int().positive(),
+  currency_code: z.string().length(3),
+  paid_at: TimestampSchema.optional(),
+  payment_method_id: UuidSchema.nullable().optional(),
+  reference: z.string().max(120).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  external_ref: z.string().max(120).nullable().optional(),
+  exchange_rate: z.number().positive().nullable().optional(),
+});
+export type PaymentCreate = z.infer<typeof PaymentCreateSchema>;
+
+/**
+ * Patch body for `PATCH /invoicing-api/payments/:id`. Allowed only while
+ * voided_at IS NULL. amount_cents stays positive if supplied.
+ */
+export const PaymentPatchSchema = z.object({
+  paid_at: TimestampSchema.optional(),
+  amount_cents: z.number().int().positive().optional(),
+  payment_method_id: UuidSchema.nullable().optional(),
+  reference: z.string().max(120).nullable().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  external_ref: z.string().max(120).nullable().optional(),
+  exchange_rate: z.number().positive().nullable().optional(),
+});
+export type PaymentPatch = z.infer<typeof PaymentPatchSchema>;
+
+export const PaymentVoidSchema = z.object({
+  void_reason: z.string().min(1).max(2000),
+});
+export type PaymentVoid = z.infer<typeof PaymentVoidSchema>;
+
+// =========================================================================
+// Credit Notes (Wave 5 / Phase 8)
+// =========================================================================
+
+/**
+ * Credit note row. Reflects the prod `public.credit_notes` shape. Status
+ * CHECK is 4 values (draft/issued/applied/voided). `reason` is a nullable
+ * text CHECK of (refund | adjustment | write_off | duplicate | other) —
+ * NOT the same surface as a free-text void reason. There is no
+ * `void_reason` column; voids stamp `voided_at` only.
+ */
+export const CreditNoteSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  credit_note_number: z.string().min(1),
+  customer_id: UuidSchema,
+  invoice_id: UuidSchema.nullable(),
+  issue_date: z.string(),
+  status: CreditNoteStatusSchema,
+  reason: CreditNoteReasonSchema.nullable(),
+  currency_code: z.string().length(3),
+  amount_cents: CentsSchema,
+  applied_cents: CentsSchema,
+  notes: z.string().nullable(),
+  voided_at: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type CreditNote = z.infer<typeof CreditNoteSchema>;
+
+/**
+ * Create body for `POST /invoicing-api/credit-notes`. The CHECK constraint
+ * `applied_cents <= amount_cents` is enforced server-side; create always
+ * starts with applied_cents=0 and status='draft'.
+ */
+export const CreditNoteCreateSchema = z.object({
+  customer_id: UuidSchema,
+  currency_code: z.string().length(3),
+  amount_cents: z.number().int().nonnegative(),
+  invoice_id: UuidSchema.nullable().optional(),
+  reason: CreditNoteReasonSchema.nullable().optional(),
+  notes: z.string().nullable().optional(),
+  issue_date: z.string().date().optional(),
+});
+export type CreditNoteCreate = z.infer<typeof CreditNoteCreateSchema>;
+
+/** Empty body acceptable for /issue. */
+export const CreditNoteIssueSchema = z.object({}).strict();
+export type CreditNoteIssue = z.infer<typeof CreditNoteIssueSchema>;
+
+/**
+ * Apply payload. `invoice_id` MUST belong to the caller's org; amount_cents
+ * must be positive and not exceed (credit_note.amount_cents -
+ * credit_note.applied_cents). The DB CHECK
+ * `applied_cents <= amount_cents` is the floor; server-side validates
+ * before bumping applied_cents.
+ */
+export const CreditNoteApplySchema = z.object({
+  invoice_id: UuidSchema,
+  amount_cents: z.number().int().positive(),
+});
+export type CreditNoteApply = z.infer<typeof CreditNoteApplySchema>;
+
+/**
+ * Void payload. There is no `void_reason` column on credit_notes (verified
+ * 2026-05-15); the reason text is logged in a notes-only fashion server-
+ * side and the row stamps `voided_at`. Schema requires a reason string for
+ * caller-side accountability even though the DB column is absent.
+ */
+export const CreditNoteVoidSchema = z.object({
+  reason: z.string().min(1).max(2000),
+});
+export type CreditNoteVoid = z.infer<typeof CreditNoteVoidSchema>;

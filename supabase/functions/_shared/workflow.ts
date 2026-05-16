@@ -52,6 +52,28 @@ export type ProjectState =
 export type PhaseStatus = 'pending' | 'active' | 'completed' | 'cancelled';
 
 /**
+ * Invoice state — prod `invoices.status` text CHECK (verified 2026-05-15,
+ * schema_migrations=0052). Nine values; `refunded` and `cancelled` are
+ * terminal.
+ */
+export type InvoiceState =
+  | 'draft'
+  | 'pending'
+  | 'sent'
+  | 'partially_paid'
+  | 'paid'
+  | 'overdue'
+  | 'refunded'
+  | 'cancelled'
+  | 'on_hold';
+
+/**
+ * Credit note state — prod `credit_notes.status` text CHECK (verified
+ * 2026-05-15, schema_migrations=0052). Four values; `voided` is terminal.
+ */
+export type CreditNoteState = 'draft' | 'issued' | 'applied' | 'voided';
+
+/**
  * Quote transitions matrix. Every (from -> to) listed here is a legal real
  * state change. Endpoints whose semantics are timestamp/activity-only (send,
  * accept) DO NOT appear here; the handler stamps state_changed_at + emits an
@@ -94,7 +116,38 @@ export const PHASE_TRANSITIONS: Record<PhaseStatus, readonly PhaseStatus[]> = {
   cancelled: [],
 };
 
-export type WorkflowMachine = 'quote' | 'project' | 'phase';
+/**
+ * Invoice transitions matrix (TS1/08-database/00-SCHEMA-MASTER.md §15).
+ * Lifecycle: draft -> pending -> sent -> partially_paid -> paid; overdue
+ * reachable from sent / partially_paid; on_hold reachable from pending / sent;
+ * refunded reachable from paid / partially_paid (terminal); cancelled
+ * reachable from any non-terminal pre-paid state (terminal).
+ */
+export const INVOICE_TRANSITIONS: Record<InvoiceState, readonly InvoiceState[]> = {
+  draft: ['pending', 'cancelled'],
+  pending: ['sent', 'cancelled', 'on_hold'],
+  sent: ['partially_paid', 'paid', 'overdue', 'cancelled', 'on_hold'],
+  partially_paid: ['paid', 'overdue', 'refunded'],
+  paid: ['refunded'],
+  overdue: ['partially_paid', 'paid', 'cancelled'],
+  on_hold: ['pending', 'sent', 'cancelled'],
+  refunded: [],
+  cancelled: [],
+};
+
+/**
+ * Credit note transitions matrix (CHECK constraint values).
+ * Lifecycle: draft -> issued -> applied; voided reachable from any
+ * non-terminal state and is terminal.
+ */
+export const CREDIT_NOTE_TRANSITIONS: Record<CreditNoteState, readonly CreditNoteState[]> = {
+  draft: ['issued', 'voided'],
+  issued: ['applied', 'voided'],
+  applied: ['voided'],
+  voided: [],
+};
+
+export type WorkflowMachine = 'quote' | 'project' | 'phase' | 'invoice' | 'credit_note';
 
 type Matrix = Record<string, readonly string[]>;
 
@@ -106,6 +159,10 @@ function getMatrix(machine: WorkflowMachine): Matrix {
       return PROJECT_TRANSITIONS as Matrix;
     case 'phase':
       return PHASE_TRANSITIONS as Matrix;
+    case 'invoice':
+      return INVOICE_TRANSITIONS as Matrix;
+    case 'credit_note':
+      return CREDIT_NOTE_TRANSITIONS as Matrix;
   }
 }
 
