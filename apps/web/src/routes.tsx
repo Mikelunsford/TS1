@@ -2,8 +2,10 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './auth/ProtectedRoute';
+import { RequireFlag } from './components/shell/RequireFlag';
 
 const PlaceholderHome = lazy(() => import('./pages/PlaceholderHome'));
+const FeatureUnavailable = lazy(() => import('./pages/FeatureUnavailable'));
 const SignIn = lazy(() => import('./pages/SignIn'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const NotFound = lazy(() => import('./pages/NotFound'));
@@ -104,6 +106,17 @@ const TaxesPage = lazy(() => import('./pages/settings/TaxesPage'));
 const PaymentMethodsPage = lazy(() => import('./pages/settings/PaymentMethodsPage'));
 const ExchangeRatesPage = lazy(() => import('./pages/settings/ExchangeRatesPage'));
 // end settings lazy.
+
+// Settings hub (Phase 15) — Phase15-FE owns this block.
+const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
+const SettingsCompanyPage = lazy(() => import('./pages/settings/groups/Company'));
+const SettingsInvoicingPage = lazy(() => import('./pages/settings/groups/Invoicing'));
+const SettingsQuotingPage = lazy(() => import('./pages/settings/groups/Quoting'));
+const SettingsFinancePage = lazy(() => import('./pages/settings/groups/Finance'));
+const SettingsBrandingPage = lazy(() => import('./pages/settings/groups/Branding'));
+const SettingsClientsPage = lazy(() => import('./pages/settings/groups/Clients'));
+const SettingsNumberingPage = lazy(() => import('./pages/settings/groups/Numbering'));
+// end Phase 15 settings lazy.
 
 function PageFallback() {
   return (
@@ -433,73 +446,78 @@ export function AppRoutes() {
           }
         />
         {/* end procurement routes. */}
-        {/* Expenses (Wave 7 / Phase 11 — FE-A owns this block) */}
-        <Route
-          path="/expenses"
-          element={
-            <ProtectedRoute>
-              <ExpenseListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/new"
-          element={
-            <ProtectedRoute>
-              <ExpenseFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/my"
-          element={
-            <ProtectedRoute>
-              <MyExpensesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/:id"
-          element={
-            <ProtectedRoute>
-              <ExpenseDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/:id/edit"
-          element={
-            <ProtectedRoute>
-              <ExpenseFormPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Phase 15 — flag-gated routes (FE-Phase15 owns this block). */}
+        {/* Expenses (Wave 7 / Phase 11) — gated on finance.expenses */}
+        <Route element={<RequireFlag flag="finance.expenses" />}>
+          <Route
+            path="/expenses"
+            element={
+              <ProtectedRoute>
+                <ExpenseListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses/new"
+            element={
+              <ProtectedRoute>
+                <ExpenseFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses/my"
+            element={
+              <ProtectedRoute>
+                <MyExpensesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses/:id"
+            element={
+              <ProtectedRoute>
+                <ExpenseDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses/:id/edit"
+            element={
+              <ProtectedRoute>
+                <ExpenseFormPage />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
         {/* end expenses routes. */}
-        {/* Finance / GL (Wave 8c / Phase 12 — FE-A owns this block) */}
-        <Route
-          path="/finance/accounts"
-          element={
-            <ProtectedRoute>
-              <AccountListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/finance/accounts/new"
-          element={
-            <ProtectedRoute>
-              <AccountFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/finance/accounts/:id"
-          element={
-            <ProtectedRoute>
-              <AccountFormPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Finance / GL (Wave 8c / Phase 12) — accounts gated on finance.chart_of_accounts; journal-entries ungated (auto-emit prereq) */}
+        <Route element={<RequireFlag flag="finance.chart_of_accounts" />}>
+          <Route
+            path="/finance/accounts"
+            element={
+              <ProtectedRoute>
+                <AccountListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/finance/accounts/new"
+            element={
+              <ProtectedRoute>
+                <AccountFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/finance/accounts/:id"
+            element={
+              <ProtectedRoute>
+                <AccountFormPage />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
         <Route
           path="/finance/journal-entries"
           element={
@@ -533,47 +551,50 @@ export function AppRoutes() {
           }
         />
         {/* end finance / GL routes. */}
-        {/* Inventory (Wave 8f / Phase 13 — FE-A owns this block) */}
-        <Route
-          path="/warehouses"
-          element={
-            <ProtectedRoute>
-              <WarehouseListPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/warehouses/new"
-          element={
-            <ProtectedRoute>
-              <WarehouseFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/warehouses/:id/edit"
-          element={
-            <ProtectedRoute>
-              <WarehouseFormPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stock"
-          element={
-            <ProtectedRoute>
-              <StockOverviewPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/stock/adjust"
-          element={
-            <ProtectedRoute>
-              <StockAdjustPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Inventory (Wave 8f / Phase 13) — gated on inventory.enabled */}
+        <Route element={<RequireFlag flag="inventory.enabled" />}>
+          <Route
+            path="/warehouses"
+            element={
+              <ProtectedRoute>
+                <WarehouseListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/warehouses/new"
+            element={
+              <ProtectedRoute>
+                <WarehouseFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/warehouses/:id/edit"
+            element={
+              <ProtectedRoute>
+                <WarehouseFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock"
+            element={
+              <ProtectedRoute>
+                <StockOverviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock/adjust"
+            element={
+              <ProtectedRoute>
+                <StockAdjustPage />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
+        {/* /Phase15-FE block */}
         {/* end inventory routes. */}
         {/* Operations (Wave 8f / Phase 13 — FE-A owns this block) */}
         <Route
@@ -649,48 +670,37 @@ export function AppRoutes() {
           }
         />
         {/* end operations routes. */}
-        {/* Settings (Wave 3) — FE-B owns this block. */}
+        {/* Settings (Wave 3 reference data + Phase 15 hub) — FE-Phase15 owns this block. */}
         <Route
           path="/settings"
           element={
             <ProtectedRoute>
-              <SettingsIndexRedirect />
+              <SettingsLayout />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/settings/currencies"
-          element={
-            <ProtectedRoute>
-              <CurrenciesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings/taxes"
-          element={
-            <ProtectedRoute>
-              <TaxesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings/payment-methods"
-          element={
-            <ProtectedRoute>
-              <PaymentMethodsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings/exchange-rates"
-          element={
-            <ProtectedRoute>
-              <ExchangeRatesPage />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route index element={<SettingsIndexRedirect />} />
+          <Route path="company" element={<SettingsCompanyPage />} />
+          <Route path="invoicing" element={<SettingsInvoicingPage />} />
+          <Route path="quoting" element={<SettingsQuotingPage />} />
+          <Route path="finance" element={<SettingsFinancePage />} />
+          <Route path="branding" element={<SettingsBrandingPage />} />
+          <Route path="clients" element={<SettingsClientsPage />} />
+          <Route path="numbering" element={<SettingsNumberingPage />} />
+          <Route path="currencies" element={<CurrenciesPage />} />
+          <Route path="taxes" element={<TaxesPage />} />
+          <Route path="payment-methods" element={<PaymentMethodsPage />} />
+          <Route path="exchange-rates" element={<ExchangeRatesPage />} />
+        </Route>
         {/* end settings routes. */}
+        <Route
+          path="/feature-unavailable"
+          element={
+            <ProtectedRoute>
+              <FeatureUnavailable />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />
       </Routes>

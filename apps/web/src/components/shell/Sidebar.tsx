@@ -138,17 +138,27 @@ const items: NavItem[] = [
   },
   // end finance / GL nav.
   { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 8 },
+  // Settings (Phase 15) — cap-gated to org_admin+. Phase15-FE block start.
   {
     to: '/settings',
     label: 'Settings',
     icon: Settings,
+    requireCap: 'org.settings.write',
     children: [
+      { to: '/settings/company', label: 'Company', icon: Settings },
+      { to: '/settings/invoicing', label: 'Invoicing', icon: Receipt },
+      { to: '/settings/quoting', label: 'Quoting', icon: FileText },
+      { to: '/settings/finance', label: 'Finance', icon: BookOpen },
+      { to: '/settings/branding', label: 'Branding', icon: Sparkles },
+      { to: '/settings/clients', label: 'Clients', icon: Users },
+      { to: '/settings/numbering', label: 'Numbering', icon: Layers },
       { to: '/settings/currencies', label: 'Currencies', icon: Wallet },
       { to: '/settings/taxes', label: 'Taxes', icon: Receipt },
       { to: '/settings/payment-methods', label: 'Payment methods', icon: CreditCard },
       { to: '/settings/exchange-rates', label: 'Exchange rates', icon: TrendingUp },
     ],
   },
+  // /Phase15-FE block.
 ];
 
 export function Sidebar() {

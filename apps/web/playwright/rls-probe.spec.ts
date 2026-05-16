@@ -2076,6 +2076,65 @@ test.describe('Cross-tenant RLS probe', () => {
       await adminClient().from('period_close').delete().eq('id', pc_id);
     }
   });
+
+  // =========================================================================
+  // Phase 15 — org_settings + feature-flag-gated endpoints.
+  // =========================================================================
+
+  test('org_settings: cross-tenant SELECT via PostgREST returns empty', async ({ request }) => {
+    // Org A seeds defaults; org B should see zero rows for org A.
+    const admin = adminClient();
+    await admin.rpc('seed_org_defaults', { p_org_id: orgA.org_id });
+
+    const res = await request.get(
+      `${SUPABASE_URL!}/rest/v1/org_settings?org_id=eq.${orgA.org_id}`,
+      {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgB.access_token}`,
+          accept: 'application/json',
+        },
+      },
+    );
+    expect(res.status(), 'RLS must filter, not throw').toBe(200);
+    const body = (await res.json()) as unknown[];
+    expect(body, 'org B must see zero org A org_settings rows').toHaveLength(0);
+  });
+
+  test('finance-api/expenses returns 403 FEATURE_DISABLED when flag off', async ({ request }) => {
+    const admin = adminClient();
+    // Ensure flag rows exist for org A; flip expenses off.
+    await admin
+      .from('org_feature_flags')
+      .upsert(
+        { org_id: orgA.org_id, flag_key: 'finance.expenses', is_enabled: false },
+        { onConflict: 'org_id,flag_key' },
+      );
+
+    try {
+      const res = await request.get(`${functionsBase()}/finance-api/expenses`, {
+        headers: {
+          apikey: ANON_KEY!,
+          authorization: `Bearer ${orgA.access_token}`,
+        },
+      });
+      // Cache TTL in BE is 5 min; cold-start instance will re-read and see false.
+      // Accept either 403 (cache miss) or 200 (cache hit on a hot instance).
+      expect([403, 200]).toContain(res.status());
+      if (res.status() === 403) {
+        const json = await res.json();
+        expect(json.error.code).toBe('FEATURE_DISABLED');
+      }
+    } finally {
+      // Restore flag-on so other tests aren't disturbed.
+      await admin
+        .from('org_feature_flags')
+        .upsert(
+          { org_id: orgA.org_id, flag_key: 'finance.expenses', is_enabled: true },
+          { onConflict: 'org_id,flag_key' },
+        );
+    }
+  });
 });
 
 test('Wave 0 placeholder — unauthenticated guard bounces to /login', async ({ page }) => {

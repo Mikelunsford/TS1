@@ -8,6 +8,7 @@
 
 import type { Route } from '../_shared/route.ts';
 import { ok } from '../_shared/responses.ts';
+import { withFlag } from '../_shared/withFlag.ts';
 import {
   archiveItem,
   createItem,
@@ -71,18 +72,18 @@ export const routes: Route[] = [
   { method: 'PATCH', path: '/units/:id', handler: patchUnit },
   { method: 'DELETE', path: '/units/:id', handler: deleteUnit },
 
-  // Warehouses (Wave 8d)
-  { method: 'GET', path: '/warehouses', handler: listWarehouses },
-  { method: 'POST', path: '/warehouses', handler: createWarehouse },
-  { method: 'GET', path: '/warehouses/:id', handler: getWarehouse },
-  { method: 'PATCH', path: '/warehouses/:id', handler: patchWarehouse },
-  { method: 'POST', path: '/warehouses/:id/archive', handler: archiveWarehouse },
+  // Warehouses (Wave 8d) — Phase 15 gated on inventory.enabled
+  { method: 'GET', path: '/warehouses', handler: withFlag('inventory.enabled', listWarehouses) },
+  { method: 'POST', path: '/warehouses', handler: withFlag('inventory.enabled', createWarehouse) },
+  { method: 'GET', path: '/warehouses/:id', handler: withFlag('inventory.enabled', getWarehouse) },
+  { method: 'PATCH', path: '/warehouses/:id', handler: withFlag('inventory.enabled', patchWarehouse) },
+  { method: 'POST', path: '/warehouses/:id/archive', handler: withFlag('inventory.enabled', archiveWarehouse) },
 
-  // Stock Levels (read-only) (Wave 8d)
-  { method: 'GET', path: '/stock-levels', handler: listStockLevels },
-  { method: 'GET', path: '/stock-levels/by-item-warehouse', handler: getStockLevelByItemWarehouse },
+  // Stock Levels (read-only) (Wave 8d) — Phase 15 gated on inventory.enabled
+  { method: 'GET', path: '/stock-levels', handler: withFlag('inventory.enabled', listStockLevels) },
+  { method: 'GET', path: '/stock-levels/by-item-warehouse', handler: withFlag('inventory.enabled', getStockLevelByItemWarehouse) },
 
-  // Stock Movements (Wave 8d)
-  { method: 'GET', path: '/stock-movements', handler: listStockMovements },
-  { method: 'POST', path: '/stock-movements/adjustment', handler: createStockMovementAdjustment },
+  // Stock Movements (Wave 8d) — Phase 15 gated on inventory.enabled
+  { method: 'GET', path: '/stock-movements', handler: withFlag('inventory.enabled', listStockMovements) },
+  { method: 'POST', path: '/stock-movements/adjustment', handler: withFlag('inventory.enabled', createStockMovementAdjustment) },
 ];
