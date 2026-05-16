@@ -167,7 +167,7 @@ async function nextQuoteNumber(orgId: string): Promise<string> {
 async function ensureCustomerInOrg(caller: Caller, customerId: string): Promise<string> {
   const { data, error } = await admin()
     .from('customers')
-    .select('id, display_name, name')
+    .select('id, display_name')
     .eq('id', customerId)
     .eq('org_id', caller.orgId)
     .maybeSingle();
@@ -179,8 +179,7 @@ async function ensureCustomerInOrg(caller: Caller, customerId: string): Promise<
   if (!data) {
     throw new ApiError('VALIDATION_ERROR', 'customer_id not found in caller org', 422);
   }
-  const row = data as { display_name?: string | null; name?: string | null };
-  return row.display_name ?? row.name ?? '';
+  return (data as { display_name: string }).display_name;
 }
 
 async function logQuoteActivity(

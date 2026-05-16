@@ -293,7 +293,7 @@ export async function convertLead({ req, params }: Ctx): Promise<Response> {
             .from('customers')
             .insert({
               org_id: caller.orgId,
-              name: lead.company_name ?? lead.display_name,
+              display_name: lead.company_name ?? lead.display_name,
               client_type: 'company',
               client_status: 'active',
               email: lead.email,
