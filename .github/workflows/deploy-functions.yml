@@ -95,6 +95,9 @@ jobs:
             pdf-worker
             notifications-worker
             # End Phase 19 (Wave 10 Session 3).
+            # Phase 21 (Wave 10 Session 4) — C1 owns this block.
+            customer-portal-api
+            # End Phase 21 (Wave 10 Session 4).
             # Phase 22 (Wave 10 Session 4) — C2 owns this block.
             vendor-portal-api
             # End Phase 22 (Wave 10 Session 4).

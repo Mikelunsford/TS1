@@ -161,6 +161,12 @@ export const ALL_CAPABILITIES = [
   // Phase 19 (Wave 10 Session 3) — owns this block.
   'pdf.render',
   // End Phase 19 (Wave 10 Session 3).
+  // Phase 21 (Wave 10 Session 4) — C1 owns this block.
+  // Gates the customer-portal-api bundle. Granted to `customer_user` role
+  // only; every other role is denied so the portal surface is intrinsically
+  // unreachable from a staff session.
+  'portal.read',
+  // End Phase 21 (Wave 10 Session 4).
   // Phase 22 (Wave 10 Session 4) — C2 owns this block.
   'vendor_portal.read',
   'vendor_portal.write',
@@ -189,6 +195,14 @@ function allow(role: Role, cap: Capability): boolean {
   // enforces row-level access (org_id match + entity ownership).
   if (cap === 'pdf.render') return true;
   // End Phase 19 (Wave 10 Session 3).
+
+  // Phase 21 (Wave 10 Session 4) — C1 owns this block.
+  // portal.read is exclusively a customer_user capability. Staff roles get
+  // denied here even though owners/admins normally pass everything — the
+  // portal surface is intentionally unreachable from a staff session so the
+  // bundle's caller can be trusted to be a customer-scoped JWT.
+  if (cap === 'portal.read') return role === 'customer_user';
+  // End Phase 21 (Wave 10 Session 4).
 
   // Owners and admins have full reach.
   if (role === 'org_owner' || role === 'org_admin') return true;
