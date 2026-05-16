@@ -1,26 +1,25 @@
 import { describe, it, expect } from 'vitest';
 
-import { taxTotalCents, type TaxableLine } from '@/lib/money';
+import { roundHalfEven, taxTotalCents, type TaxableLine } from '@/lib/money';
 
 /**
  * Quote-line money parity. Extends `wave3/money-parity.test.ts` with a
  * 3-line fixture that mirrors the per-line totals math implemented in
  * `supabase/functions/quotes-api/handlers/line-items.ts#computeLineTotals`.
  *
- * BE math (per line):
- *   gross           = Math.round(qty * unit_price_cents)
+ * BE math (per line, post-F-Wave5-02 half-even flip):
+ *   gross           = roundHalfEven(qty * unit_price_cents)
  *   line_total_cents = gross - discount_cents
- *   tax_amount_cents = Math.round(line_total_cents * rate)
+ *   tax_amount_cents = roundHalfEven(line_total_cents * rate)
  *
  * SPA math (`taxTotalCents`, per line):
  *   line_total = qty * unit_price_cents - (discount_cents ?? 0)
- *   line_tax   = Math.round(line_total * rate)
+ *   line_tax   = roundHalfEven(line_total * rate)
  *
- * For integer qty the two are byte-identical: `Math.round(int * int) === int * int`.
- * The fixture below uses integer qty so the SPA preview matches the BE
- * recompute exactly. Any future widening of qty to fractional values
- * (numeric(14,4) on the DB) must update either both helpers together OR
- * pin this fixture against the new shared rule.
+ * For integer qty the two are byte-identical. The fixture below uses integer
+ * qty and rates whose products don't land at exact `.5` boundaries, so the
+ * half-up → half-even flip is value-stable here; the boundary cases (262.5 →
+ * 262 vs 263) are pinned in wave5/money-half-even.test.ts.
  */
 
 describe('money parity: quote-line per-line totals (3-line fixture)', () => {
@@ -37,9 +36,9 @@ describe('money parity: quote-line per-line totals (3-line fixture)', () => {
 
     // Mirror BE computeLineTotals per line.
     const beLines = lines.map((l) => {
-      const gross = Math.round(l.qty * l.unit_price_cents);
+      const gross = roundHalfEven(l.qty * l.unit_price_cents);
       const line_total_cents = gross - (l.discount_cents ?? 0);
-      const tax_amount_cents = Math.round(line_total_cents * (l.tax_rate ?? 0));
+      const tax_amount_cents = roundHalfEven(line_total_cents * (l.tax_rate ?? 0));
       return { line_total_cents, tax_amount_cents };
     });
     const beSubtotal = beLines.reduce((s, r) => s + r.line_total_cents, 0);

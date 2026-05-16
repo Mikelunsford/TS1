@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { toCents, fromCents, formatMoney, taxTotalCents } from './money';
+import { toCents, fromCents, formatMoney, taxTotalCents, roundHalfEven } from './money';
 
 describe('money', () => {
   describe('toCents', () => {
@@ -45,15 +45,15 @@ describe('money', () => {
 
   describe('taxTotalCents', () => {
     it('rounds per-line at the cent boundary then sums (no compound rounding)', () => {
-      // Line 1: 3 * 1000 = 3000 ¢; 3000 * 0.0875 = 262.5 -> 263 (half-up).
+      // Line 1: 3 * 1000 = 3000 ¢; 3000 * 0.0875 = 262.5 → 262 (half-even / F-Wave5-02; 262 is even).
       // Line 2: 2 * 1500 = 3000 ¢; 3000 * 0.05 = 150 exact.
       const totals = taxTotalCents([
         { qty: 3, unit_price_cents: 1000, tax_rate: 0.0875 },
         { qty: 2, unit_price_cents: 1500, tax_rate: 0.05 },
       ]);
       expect(totals.subtotal_cents).toBe(6000);
-      expect(totals.tax_cents).toBe(413);
-      expect(totals.total_cents).toBe(6413);
+      expect(totals.tax_cents).toBe(412);
+      expect(totals.total_cents).toBe(6412);
     });
 
     it('treats missing tax_rate as zero', () => {
@@ -74,11 +74,34 @@ describe('money', () => {
     });
 
     it('handles a single line with a non-trivial rate', () => {
-      // 7 * 333 = 2331 ¢; 2331 * 0.085 = 198.135 -> 198.
+      // 7 * 333 = 2331 ¢; 2331 * 0.085 = 198.135 -> 198 (non-boundary; unchanged under half-even).
       const totals = taxTotalCents([{ qty: 7, unit_price_cents: 333, tax_rate: 0.085 }]);
       expect(totals.subtotal_cents).toBe(2331);
       expect(totals.tax_cents).toBe(198);
       expect(totals.total_cents).toBe(2529);
+    });
+  });
+
+  describe('roundHalfEven', () => {
+    it('matches Math.round for non-boundary values', () => {
+      expect(roundHalfEven(1.2)).toBe(1);
+      expect(roundHalfEven(1.8)).toBe(2);
+      expect(roundHalfEven(-1.2)).toBe(-1);
+      expect(roundHalfEven(-1.8)).toBe(-2);
+    });
+    it('rounds .5 to the nearest EVEN integer (banker\'s rule)', () => {
+      // The boundary cases that distinguish half-even from half-up.
+      expect(roundHalfEven(0.5)).toBe(0);
+      expect(roundHalfEven(1.5)).toBe(2);
+      expect(roundHalfEven(2.5)).toBe(2);
+      expect(roundHalfEven(3.5)).toBe(4);
+      expect(roundHalfEven(4.5)).toBe(4);
+      expect(roundHalfEven(262.5)).toBe(262);
+      expect(roundHalfEven(263.5)).toBe(264);
+    });
+    it('passes through non-finite values', () => {
+      expect(Number.isNaN(roundHalfEven(Number.NaN))).toBe(true);
+      expect(roundHalfEven(Number.POSITIVE_INFINITY)).toBe(Number.POSITIVE_INFINITY);
     });
   });
 });

@@ -36,6 +36,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { roundHalfEven } from '../../_shared/money.ts';
 
 const LINE_COLS =
   'id, org_id, quote_id, quote_version_id, item_id, description, quantity, unit, ' +
@@ -69,11 +70,14 @@ function rowToLine(row: LineRow): QuoteLine {
 /**
  * Per-line totals computation. Mirrors `taxTotalCents` from
  * apps/web/src/lib/money.ts but operates on the row shape we persist:
- * line_total = round(qty * unit_price) - discount; tax_amount =
- * round(line_total * tax_rate).
+ * line_total = qty * unit_price - discount; tax_amount =
+ * roundHalfEven(line_total * tax_rate).
  *
- * The SPA preview uses the SAME math via taxTotalCents (R-W3-06 close); the
- * money-parity contract test pins the fixture.
+ * Rounding: half-even per constitution (post-F-Wave5-02). For integer
+ * `qty * unit_price_cents` the `gross` computation is exact so the only
+ * rounding happens on the tax product. The SPA preview uses the SAME helper
+ * via `taxTotalCents` (byte-mirrored from `_shared/money.ts#roundHalfEven`);
+ * the money-parity contract test pins the fixture.
  */
 function computeLineTotals(
   qty: number,
@@ -81,9 +85,9 @@ function computeLineTotals(
   discountCents: number,
   taxRate: number,
 ): { line_total_cents: number; tax_amount_cents: number } {
-  const gross = Math.round(qty * unitPriceCents);
+  const gross = roundHalfEven(qty * unitPriceCents);
   const line_total_cents = gross - discountCents;
-  const tax_amount_cents = Math.round(line_total_cents * taxRate);
+  const tax_amount_cents = roundHalfEven(line_total_cents * taxRate);
   return { line_total_cents, tax_amount_cents };
 }
 
