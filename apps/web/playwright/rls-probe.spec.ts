@@ -726,6 +726,35 @@ async function seedExpense(fx: OrgFixture): Promise<string> {
   return data.id as string;
 }
 
+/**
+ * Seed a period_close row (Wave 8e / Phase 18). status='open' so the row is
+ * mutable. UNIQUE on (org_id, period_start, period_end, deleted_at).
+ */
+async function seedPeriodClose(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'pc');
+  // Use a date offset to keep period ranges unique across parallel test runs.
+  const seed = Date.now() % 10_000_000;
+  const base = new Date(2020, 0, 1);
+  base.setUTCDate(base.getUTCDate() + (seed % 3650));
+  const start = base.toISOString().slice(0, 10);
+  base.setUTCDate(base.getUTCDate() + 30);
+  const end = base.toISOString().slice(0, 10);
+  const { data, error } = await admin
+    .from('period_close')
+    .insert({
+      org_id: fx.org_id,
+      period_start: start,
+      period_end: end,
+      status: 'open',
+      notes: `RLS Probe ${suffix}`,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`period_close seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /** Teardown: delete user (cascades memberships) + delete org row. */
 async function teardown(fx: OrgFixture): Promise<void> {
   const admin = adminClient();
@@ -2003,6 +2032,48 @@ test.describe('Cross-tenant RLS probe', () => {
       expect(ownBody[0]!.id).toBe(expense_id);
     } finally {
       await adminClient().from('expenses').delete().eq('id', expense_id);
+    }
+  });
+
+  // =========================================================================
+  // Wave 8e / Phase 18 — period_close surface RLS probe.
+  // =========================================================================
+
+  test('period_close: GET-by-id cross-tenant returns 200 + empty (never 403)', async ({
+    request,
+  }) => {
+    const pc_id = await seedPeriodClose(orgA);
+    try {
+      const res = await request.get(
+        `${SUPABASE_URL!}/rest/v1/period_close?id=eq.${pc_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgB.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const body = (await res.json()) as unknown[];
+      expect(body, 'org B must see zero org A period_close rows by id').toHaveLength(0);
+
+      const ownRes = await request.get(
+        `${SUPABASE_URL!}/rest/v1/period_close?id=eq.${pc_id}`,
+        {
+          headers: {
+            apikey: ANON_KEY!,
+            authorization: `Bearer ${orgA.access_token}`,
+            accept: 'application/json',
+          },
+        },
+      );
+      expect(ownRes.status()).toBe(200);
+      const ownBody = (await ownRes.json()) as Array<{ id: string }>;
+      expect(ownBody.length, 'org A must see its own period_close').toBe(1);
+      expect(ownBody[0]!.id).toBe(pc_id);
+    } finally {
+      await adminClient().from('period_close').delete().eq('id', pc_id);
     }
   });
 });

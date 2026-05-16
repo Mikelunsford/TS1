@@ -62,6 +62,19 @@ import {
   postJournalEntry,
   reverseJournalEntry,
 } from './handlers/journal-entries.ts';
+import {
+  closePeriodClose,
+  createPeriodClose,
+  getPeriodClose,
+  listPeriodCloses,
+  patchPeriodClose,
+  reopenPeriodClose,
+} from './handlers/period-close.ts';
+import {
+  getBalanceSheet,
+  getProfitLoss,
+  getTrialBalance,
+} from './handlers/reports.ts';
 
 const BUNDLE = 'finance-api';
 
@@ -125,4 +138,17 @@ export const routes: Route[] = [
   { method: 'PATCH', path: '/journal-entries/:id', handler: patchJournalEntry },
   { method: 'POST', path: '/journal-entries/:id/post', handler: postJournalEntry },
   { method: 'POST', path: '/journal-entries/:id/reverse', handler: reverseJournalEntry },
+
+  // Period close (Wave 8e / Phase 18)
+  { method: 'GET', path: '/period-closes', handler: listPeriodCloses },
+  { method: 'POST', path: '/period-closes', handler: createPeriodClose },
+  { method: 'GET', path: '/period-closes/:id', handler: getPeriodClose },
+  { method: 'PATCH', path: '/period-closes/:id', handler: patchPeriodClose },
+  { method: 'POST', path: '/period-closes/:id/close', handler: closePeriodClose },
+  { method: 'POST', path: '/period-closes/:id/reopen', handler: reopenPeriodClose },
+
+  // Financial reports (Wave 8e / Phase 18)
+  { method: 'GET', path: '/reports/trial-balance', handler: getTrialBalance },
+  { method: 'GET', path: '/reports/profit-loss', handler: getProfitLoss },
+  { method: 'GET', path: '/reports/balance-sheet', handler: getBalanceSheet },
 ];
