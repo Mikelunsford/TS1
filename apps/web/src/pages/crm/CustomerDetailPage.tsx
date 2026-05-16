@@ -11,8 +11,20 @@ import { cn } from '@/lib/format';
 import { contactKeys, customerKeys } from '@/lib/queryKeys/crm';
 import { getCustomer } from '@/lib/services/customersService';
 import { listContacts } from '@/lib/services/contactsService';
+// Customer payments + credit notes (Wave 5 / 5.3b) — FE-B owns this block.
+import { CustomerCreditNotesTab, CustomerPaymentsTab } from './CustomerFinanceTabs';
+// end customer payments + credit notes block.
 
-type TabKey = 'overview' | 'contacts' | 'activities' | 'quotes' | 'projects' | 'invoices' | 'files';
+type TabKey =
+  | 'overview'
+  | 'contacts'
+  | 'activities'
+  | 'quotes'
+  | 'projects'
+  | 'invoices'
+  | 'payments'
+  | 'credit_notes'
+  | 'files';
 
 const TABS: Array<{ key: TabKey; label: string; deferred?: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -21,6 +33,10 @@ const TABS: Array<{ key: TabKey; label: string; deferred?: string }> = [
   { key: 'quotes', label: 'Quotes', deferred: 'Phase 3' },
   { key: 'projects', label: 'Projects', deferred: 'Phase 3' },
   { key: 'invoices', label: 'Invoices', deferred: 'Phase 3' },
+  // Customer payments + credit notes (Wave 5 / 5.3b) — FE-B owns this block.
+  { key: 'payments', label: 'Payments' },
+  { key: 'credit_notes', label: 'Credit notes' },
+  // end customer payments + credit notes block.
   { key: 'files', label: 'Files', deferred: 'Phase 5' },
 ];
 
@@ -97,6 +113,10 @@ export default function CustomerDetailPage() {
         {tab === 'activities' && id && (
           <ActivityFeed entity_type="customer" entity_id={id} />
         )}
+        {/* Customer payments + credit notes (Wave 5 / 5.3b) — FE-B owns this block. */}
+        {tab === 'payments' && id && <CustomerPaymentsTab customerId={id} />}
+        {tab === 'credit_notes' && id && <CustomerCreditNotesTab customerId={id} />}
+        {/* end customer payments + credit notes block. */}
         {TABS.find((t) => t.key === tab)?.deferred && (
           <EmptyState
             title={`${TABS.find((t) => t.key === tab)?.label} — coming in ${TABS.find((t) => t.key === tab)?.deferred}`}
