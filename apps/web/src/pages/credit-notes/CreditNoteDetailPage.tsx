@@ -29,6 +29,9 @@ import {
   voidCreditNote,
 } from '@/lib/services/creditNotesService';
 import { canTransition, type CreditNoteState } from '@/lib/workflow';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 
 export default function CreditNoteDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -306,6 +309,10 @@ export default function CreditNoteDetailPage() {
           </div>
         </div>
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="credit_note" entityId={id} idPrefix="creditnote-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

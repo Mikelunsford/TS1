@@ -16,6 +16,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { journalEntryKeys } from '@/lib/queryKeys/journalEntries';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   getJournalEntry,
   postJournalEntry,
@@ -292,6 +295,10 @@ export default function JournalEntryDetailPage() {
           )}
         </>
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="journal_entry" entityId={id} idPrefix="je-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

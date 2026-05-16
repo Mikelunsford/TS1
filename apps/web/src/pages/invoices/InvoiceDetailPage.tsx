@@ -43,6 +43,9 @@ import {
   voidInvoice,
 } from '@/lib/services/invoicesService';
 import { listPayments } from '@/lib/services/paymentsService';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 
 type Tab = 'overview' | 'lines' | 'payments' | 'credit_notes' | 'journal' | 'versions' | 'history';
 
@@ -317,6 +320,10 @@ export default function InvoiceDetailPage() {
         open={showConvertProject}
         onClose={() => setShowConvertProject(false)}
       />
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="invoice" entityId={id} idPrefix="invoice-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

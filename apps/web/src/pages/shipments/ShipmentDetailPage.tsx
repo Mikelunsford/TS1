@@ -13,6 +13,9 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { shipmentKeys } from '@/lib/queryKeys/shipments';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   cancelShipment,
   getShipment,
@@ -163,6 +166,10 @@ export default function ShipmentDetailPage() {
           <p className="mt-3 whitespace-pre-wrap rounded-md bg-bg-muted p-2 text-sm">{s.notes}</p>
         )}
       </section>
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="shipment" entityId={id} idPrefix="shipment-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

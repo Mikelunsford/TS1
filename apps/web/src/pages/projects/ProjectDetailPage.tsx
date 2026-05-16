@@ -15,6 +15,9 @@ import { formatDate } from '@/lib/formatDate';
 import { useActiveRole } from '@/lib/hooks/useActiveRole';
 import { projectKeys } from '@/lib/queryKeys/projects';
 import { listPhases } from '@/lib/services/projectPhasesService';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   closeProject,
   getProject,
@@ -257,6 +260,10 @@ export default function ProjectDetailPage() {
           currency={project.currency_code}
         />
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="project" entityId={id} idPrefix="project-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

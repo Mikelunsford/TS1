@@ -12,6 +12,9 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { itemKeys } from '@/lib/queryKeys/inventory';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   archiveItem,
   getItem,
@@ -296,6 +299,10 @@ export default function ItemDetailPage() {
           </div>
         </form>
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="item" entityId={id} idPrefix="item-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

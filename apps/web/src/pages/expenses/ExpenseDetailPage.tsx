@@ -17,6 +17,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { expenseKeys } from '@/lib/queryKeys/expenses';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   approveExpense,
   getExpense,
@@ -263,6 +266,10 @@ export default function ExpenseDetailPage() {
           )}
         </>
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="expense" entityId={id} idPrefix="expense-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

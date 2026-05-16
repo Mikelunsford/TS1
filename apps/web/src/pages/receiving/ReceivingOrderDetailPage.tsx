@@ -17,6 +17,9 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { receivingOrderKeys } from '@/lib/queryKeys/receivingOrders';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   cancelReceivingOrder,
   getReceivingOrder,
@@ -98,6 +101,10 @@ export default function ReceivingOrderDetailPage() {
       </section>
 
       <ReceiveLinesEditor open={receiveOpen} ro={ro} onClose={() => setReceiveOpen(false)} />
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="receiving_order" entityId={id} idPrefix="receiving-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

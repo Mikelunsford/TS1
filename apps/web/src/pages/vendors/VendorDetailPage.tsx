@@ -13,6 +13,9 @@ import { formatDate } from '@/lib/format';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { vendorKeys } from '@/lib/queryKeys/vendors';
 import { archiveVendor, getVendor } from '@/lib/services/vendorsService';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 
 export default function VendorDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -160,6 +163,10 @@ export default function VendorDetailPage() {
               <p className="text-xs text-fg-muted">View bills for this vendor</p>
             </Link>
           </section>
+
+          {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+          <CollaborationSection entityType="vendor" entityId={vendor.id} idPrefix="vendor-collab" />
+          {/* End Phase 16 (Wave 10 Session 2). */}
         </>
       )}
     </div>
