@@ -2,6 +2,9 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './auth/ProtectedRoute';
+// Phase 23 admin guard (Wave 10 Session 4) — C3 owns this block.
+import { AdminProtectedRoute } from './auth/AdminProtectedRoute';
+// End Phase 23 admin guard (Wave 10 Session 4).
 import { RequireFlag } from './components/shell/RequireFlag';
 
 const PlaceholderHome = lazy(() => import('./pages/PlaceholderHome'));
@@ -115,6 +118,18 @@ const SalesByItemReportPage = lazy(() => import('./pages/reports/SalesByItemRepo
 const CashPositionReportPage = lazy(() => import('./pages/reports/CashPositionReportPage'));
 const ExpenseByCategoryReportPage = lazy(() => import('./pages/reports/ExpenseByCategoryReportPage'));
 // End Reports polish (Wave 10).
+
+// Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block.
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const AdminOrganizationsPage = lazy(() => import('./pages/admin/AdminOrganizationsPage'));
+const AdminOrganizationDetailPage = lazy(
+  () => import('./pages/admin/AdminOrganizationDetailPage'),
+);
+const AdminProvisionOrgPage = lazy(() => import('./pages/admin/AdminProvisionOrgPage'));
+const AdminImpersonationHistoryPage = lazy(
+  () => import('./pages/admin/AdminImpersonationHistoryPage'),
+);
+// End Phase 23 admin routes (Wave 10 Session 4).
 
 // Settings hub (Phase 15) — Phase15-FE owns this block.
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
@@ -752,6 +767,51 @@ export function AppRoutes() {
           }
         />
         {/* End Reports polish (Wave 10). */}
+        {/* Phase 23 admin routes (Wave 10 Session 4) — C3 owns this block. */}
+        {/* AdminShell handles its own layout (slate-themed, separate from AppShell)
+            + client-side platform-admin gate via useIsPlatformAdmin. We use
+            AdminProtectedRoute (auth-only, no AppShell wrap) here. */}
+        <Route
+          path="/admin"
+          element={
+            <AdminProtectedRoute>
+              <AdminDashboardPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations"
+          element={
+            <AdminProtectedRoute>
+              <AdminOrganizationsPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations/new"
+          element={
+            <AdminProtectedRoute>
+              <AdminProvisionOrgPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/organizations/:id"
+          element={
+            <AdminProtectedRoute>
+              <AdminOrganizationDetailPage />
+            </AdminProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/impersonation-history"
+          element={
+            <AdminProtectedRoute>
+              <AdminImpersonationHistoryPage />
+            </AdminProtectedRoute>
+          }
+        />
+        {/* End Phase 23 admin routes (Wave 10 Session 4). */}
         <Route
           path="/feature-unavailable"
           element={

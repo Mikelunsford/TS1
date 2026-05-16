@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, LogOut, RefreshCw, UserCircle2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronDown, LogOut, RefreshCw, ShieldAlert, UserCircle2 } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
 import { useBranding } from '@/lib/hooks/useBranding';
@@ -11,6 +12,9 @@ import { NotificationBell } from '@/components/collaboration/NotificationBell';
 // Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block.
 import { GlobalSearchBar } from './GlobalSearchBar';
 // End Phase 17 GlobalSearchBar
+// Phase 23 platform-admin nav rail (Wave 10 Session 4) — C3 owns this block.
+import { useIsPlatformAdmin } from '@/lib/hooks/useIsPlatformAdmin';
+// End Phase 23 platform-admin nav rail (Wave 10 Session 4).
 
 /**
  * Topbar — the app's persistent top chrome.
@@ -32,6 +36,9 @@ export function Topbar() {
   const me = useMe({ enabled: state.status === 'authenticated' });
   const branding = useBranding({ enabled: state.status === 'authenticated' });
   const switchOrg = useSwitchOrg();
+  // Phase 23 platform-admin nav rail (Wave 10 Session 4) — C3 owns this block.
+  const platformAdmin = useIsPlatformAdmin({ enabled: state.status === 'authenticated' });
+  // End Phase 23 platform-admin nav rail (Wave 10 Session 4).
 
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -125,6 +132,20 @@ export function Topbar() {
         {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
         {state.status === 'authenticated' && <NotificationBell />}
         {/* End Phase 16 (Wave 10 Session 2). */}
+
+        {/* Phase 23 platform-admin nav rail (Wave 10 Session 4) — C3 owns this block. */}
+        {platformAdmin.data?.isPlatformAdmin && (
+          <Link
+            to="/admin"
+            className="flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 hover:bg-amber-500/20"
+            title="Platform Admin Console"
+            data-testid="topbar-admin-link"
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
+        {/* End Phase 23 platform-admin nav rail (Wave 10 Session 4). */}
 
         {/* Profile menu */}
         <div className="relative">
