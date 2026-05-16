@@ -1819,3 +1819,97 @@ export const VendorBillPaySchema = z.object({
   amount_cents: z.number().int().positive().optional(),
 }).strict();
 export type VendorBillPay = z.infer<typeof VendorBillPaySchema>;
+
+// ============================================================================
+// Wave 7 / Phase 11 — Expense categories / Expenses
+// ============================================================================
+//
+// Both tables exist in prod from Wave 0 chassis. expenses is single-line —
+// no expense_line_items table (D-W7-7). total_cents := amount_cents + tax_cents
+// computed by the BIU trigger added in 0058. RLS includes
+// expenses_insert_self (any staff inserts own draft) + expenses_update_self_draft
+// (own draft/submitted/rejected) + expenses_approve_fin (accounting approve).
+
+export const ExpenseCategorySchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  default_account_id: UuidSchema.nullable(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
+
+export const ExpenseCategoryCreateSchema = z.object({
+  code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  default_account_id: UuidSchema.nullable().optional(),
+}).strict();
+export type ExpenseCategoryCreate = z.infer<typeof ExpenseCategoryCreateSchema>;
+
+export const ExpenseCategoryPatchSchema = z.object({
+  label: z.string().min(1).max(255).optional(),
+  default_account_id: UuidSchema.nullable().optional(),
+  is_active: z.boolean().optional(),
+}).strict();
+export type ExpenseCategoryPatch = z.infer<typeof ExpenseCategoryPatchSchema>;
+
+export const ExpenseStateSchema = z.enum([
+  'draft', 'submitted', 'approved', 'rejected', 'reimbursed', 'paid',
+]);
+export type ExpenseStateZ = z.infer<typeof ExpenseStateSchema>;
+
+export const ExpenseSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  expense_number: z.string(),
+  category_id: UuidSchema.nullable(),
+  vendor_id: UuidSchema.nullable(),
+  project_id: UuidSchema.nullable(),
+  account_id: UuidSchema.nullable(),
+  spent_at: z.string().date(),
+  description: z.string().nullable(),
+  status: ExpenseStateSchema,
+  currency_code: z.string().length(3),
+  amount_cents: CentsSchema,
+  tax_cents: CentsSchema,
+  tax_id: UuidSchema.nullable(),
+  total_cents: CentsSchema,
+  paid_at: TimestampSchema.nullable(),
+  receipt_url: z.string().nullable(),
+  notes: z.string().nullable(),
+  submitted_by: UuidSchema.nullable(),
+  approved_by: UuidSchema.nullable(),
+  approved_at: TimestampSchema.nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+  deleted_at: TimestampSchema.nullable(),
+});
+export type Expense = z.infer<typeof ExpenseSchema>;
+
+export const ExpenseCreateSchema = z.object({
+  category_id: UuidSchema.nullable().optional(),
+  vendor_id: UuidSchema.nullable().optional(),
+  project_id: UuidSchema.nullable().optional(),
+  account_id: UuidSchema.nullable().optional(),
+  spent_at: z.string().date().optional(),
+  description: z.string().nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  amount_cents: z.number().int().nonnegative(),
+  tax_cents: z.number().int().nonnegative().optional(),
+  tax_id: UuidSchema.nullable().optional(),
+  receipt_url: z.string().max(2048).nullable().optional(),
+  notes: z.string().nullable().optional(),
+}).strict();
+export type ExpenseCreate = z.infer<typeof ExpenseCreateSchema>;
+
+export const ExpensePatchSchema = ExpenseCreateSchema.partial().strict();
+export type ExpensePatch = z.infer<typeof ExpensePatchSchema>;
+
+/** POST /expenses/:id/reject — body carries the rejection reason. */
+export const ExpenseRejectSchema = z.object({
+  reason: z.string().min(1).max(2000),
+}).strict();
+export type ExpenseReject = z.infer<typeof ExpenseRejectSchema>;

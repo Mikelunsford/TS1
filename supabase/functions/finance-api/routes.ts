@@ -30,6 +30,23 @@ import {
   listPaymentMethods,
   patchPaymentMethod,
 } from './handlers/payment-methods.ts';
+import {
+  archiveExpenseCategory,
+  createExpenseCategory,
+  listExpenseCategories,
+  patchExpenseCategory,
+} from './handlers/expense-categories.ts';
+import {
+  approveExpense,
+  createExpense,
+  getExpense,
+  listExpenses,
+  patchExpense,
+  payExpense,
+  rejectExpense,
+  reimburseExpense,
+  submitExpense,
+} from './handlers/expenses.ts';
 
 const BUNDLE = 'finance-api';
 
@@ -61,4 +78,21 @@ export const routes: Route[] = [
   { method: 'POST', path: '/payment-methods', handler: createPaymentMethod },
   { method: 'PATCH', path: '/payment-methods/:id', handler: patchPaymentMethod },
   { method: 'DELETE', path: '/payment-methods/:id', handler: deletePaymentMethod },
+
+  // Expense categories (Wave 7 / Phase 11)
+  { method: 'GET', path: '/expense-categories', handler: listExpenseCategories },
+  { method: 'POST', path: '/expense-categories', handler: createExpenseCategory },
+  { method: 'PATCH', path: '/expense-categories/:id', handler: patchExpenseCategory },
+  { method: 'POST', path: '/expense-categories/:id/archive', handler: archiveExpenseCategory },
+
+  // Expenses (Wave 7 / Phase 11)
+  { method: 'GET', path: '/expenses', handler: listExpenses },
+  { method: 'POST', path: '/expenses', handler: createExpense },
+  { method: 'GET', path: '/expenses/:id', handler: getExpense },
+  { method: 'PATCH', path: '/expenses/:id', handler: patchExpense },
+  { method: 'POST', path: '/expenses/:id/submit', handler: submitExpense },
+  { method: 'POST', path: '/expenses/:id/approve', handler: approveExpense },
+  { method: 'POST', path: '/expenses/:id/reject', handler: rejectExpense },
+  { method: 'POST', path: '/expenses/:id/reimburse', handler: reimburseExpense },
+  { method: 'POST', path: '/expenses/:id/pay', handler: payExpense },
 ];
