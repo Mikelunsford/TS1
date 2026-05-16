@@ -8,9 +8,11 @@
  *   DELETE /payment-methods/:id       — hard delete
  *
  * Partial unique constraint `WHERE is_default` means at most one default
- * per org. We perform the same is_default shuffle pattern as taxes.ts:
- * un-default the prior, then update/insert. Payments table doesn't exist
- * yet so DELETE has no FK check (will be added when payments lands).
+ * per org. Wave 6 / F-Wave6-01 routes the `is_default=true` branch through
+ * the atomic `set_default_payment_method(p_org_id, p_method_id)` SECURITY
+ * DEFINER RPC shipped in migration 0051 — eliminates the two-step UPDATE
+ * race the prior best-effort-rollback pattern compensated for. Closes
+ * R-W3-05 fully.
  */
 
 import type { Ctx } from '../../_shared/route.ts';
@@ -110,15 +112,15 @@ export async function createPaymentMethod({ req }: Ctx): Promise<Response> {
       'POST /payment-methods',
       body,
       async () => {
-        let priorDefaultId: string | null = null;
-        if (body.is_default) priorDefaultId = await unsetPriorDefault(caller, null);
-
+        // Always insert with is_default=false; if body.is_default=true, the
+        // post-insert RPC atomically clears any prior default and flips this
+        // row to default.
         const insertRow = {
           org_id: caller.orgId,
           code: body.code,
           label: body.label,
           description: body.description ?? null,
-          is_default: body.is_default,
+          is_default: false,
           is_active: body.is_active,
           created_by: caller.userId,
           updated_by: caller.userId,
@@ -129,7 +131,6 @@ export async function createPaymentMethod({ req }: Ctx): Promise<Response> {
           .select(PM_COLS)
           .single();
         if (error || !data) {
-          if (priorDefaultId) await restoreDefault(caller, priorDefaultId);
           if (error?.code === '23505') {
             throw new ApiError(
               'STATE_CONFLICT',
@@ -141,7 +142,12 @@ export async function createPaymentMethod({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToPm(data as PaymentMethodRow) } };
+
+        let row = data as PaymentMethodRow;
+        if (body.is_default) {
+          row = await callSetDefaultPaymentMethod(caller, row.id);
+        }
+        return { status: 201, body: { data: rowToPm(row) } };
       },
     );
   } catch (e) {
@@ -166,14 +172,13 @@ export async function patchPaymentMethod({ req, params }: Ctx): Promise<Response
       async () => {
         await fetchPmRow(caller, id);
 
-        let priorDefaultId: string | null = null;
-        if (body.is_default === true) priorDefaultId = await unsetPriorDefault(caller, id);
-
+        // Build the patch excluding is_default — the RPC handles that branch
+        // atomically below. is_default=false flips directly (no shuffle).
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.code !== undefined) patch.code = body.code;
         if (body.label !== undefined) patch.label = body.label;
         if (body.description !== undefined) patch.description = body.description;
-        if (body.is_default !== undefined) patch.is_default = body.is_default;
+        if (body.is_default === false) patch.is_default = false;
         if (body.is_active !== undefined) patch.is_active = body.is_active;
 
         const { data, error } = await admin()
@@ -184,7 +189,6 @@ export async function patchPaymentMethod({ req, params }: Ctx): Promise<Response
           .select(PM_COLS)
           .single();
         if (error || !data) {
-          if (priorDefaultId) await restoreDefault(caller, priorDefaultId);
           if (error?.code === '23505') {
             throw new ApiError(
               'STATE_CONFLICT',
@@ -196,7 +200,12 @@ export async function patchPaymentMethod({ req, params }: Ctx): Promise<Response
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToPm(data as PaymentMethodRow) } };
+
+        let row = data as PaymentMethodRow;
+        if (body.is_default === true) {
+          row = await callSetDefaultPaymentMethod(caller, id);
+        }
+        return { status: 200, body: { data: rowToPm(row) } };
       },
     );
   } catch (e) {
@@ -259,38 +268,35 @@ async function fetchPmRow(caller: Caller, id: string): Promise<PaymentMethodRow>
   return data as PaymentMethodRow;
 }
 
-async function unsetPriorDefault(caller: Caller, excludeId: string | null): Promise<string | null> {
-  let query = admin()
+/**
+ * Calls `set_default_payment_method(p_org_id, p_method_id)` SECURITY DEFINER
+ * RPC (migration 0051). Atomically clears any prior default in the org and
+ * stamps the named row as `is_default=true`. Returns the post-RPC row for
+ * response shaping.
+ */
+async function callSetDefaultPaymentMethod(
+  caller: Caller,
+  methodId: string,
+): Promise<PaymentMethodRow> {
+  const { error: rpcErr } = await admin().rpc('set_default_payment_method', {
+    p_org_id: caller.orgId,
+    p_method_id: methodId,
+  });
+  if (rpcErr) {
+    throw new ApiError('INTERNAL_ERROR', 'set_default_payment_method RPC failed', 500, {
+      detail: rpcErr.message,
+    });
+  }
+  const { data, error } = await admin()
     .from('payment_methods')
-    .select('id')
+    .select(PM_COLS)
+    .eq('id', methodId)
     .eq('org_id', caller.orgId)
-    .eq('is_default', true);
-  if (excludeId) query = query.neq('id', excludeId);
-  const { data, error } = await query.maybeSingle();
-  if (error) {
-    throw new ApiError('INTERNAL_ERROR', 'default payment method lookup failed', 500, {
-      detail: error.message,
+    .single();
+  if (error || !data) {
+    throw new ApiError('INTERNAL_ERROR', 'payment method re-fetch after RPC failed', 500, {
+      detail: error?.message,
     });
   }
-  if (!data) return null;
-  const priorId = (data as { id: string }).id;
-  const { error: updErr } = await admin()
-    .from('payment_methods')
-    .update({ is_default: false, updated_by: caller.userId })
-    .eq('id', priorId)
-    .eq('org_id', caller.orgId);
-  if (updErr) {
-    throw new ApiError('INTERNAL_ERROR', 'failed to clear prior default payment method', 500, {
-      detail: updErr.message,
-    });
-  }
-  return priorId;
-}
-
-async function restoreDefault(caller: Caller, id: string): Promise<void> {
-  await admin()
-    .from('payment_methods')
-    .update({ is_default: true, updated_by: caller.userId })
-    .eq('id', id)
-    .eq('org_id', caller.orgId);
+  return data as PaymentMethodRow;
 }
