@@ -58,7 +58,7 @@ const items: NavItem[] = [
   },
   { to: '/quotes', label: 'Quotes', icon: FileText, requireCap: 'quotes.read' },
   { to: '/projects', label: 'Projects', icon: ClipboardList, requireCap: 'projects.read' },
-  { to: '/invoices', label: 'Invoices', icon: Receipt, disabled: true, wave: 3 },
+  { to: '/invoices', label: 'Invoices', icon: Receipt, requireCap: 'invoices.read' },
   // Payments + Credit Notes (Wave 5 / 5.3b) — FE-B owns this block.
   { to: '/payments', label: 'Payments', icon: CreditCard, requireCap: 'payments.read' },
   { to: '/credit-notes', label: 'Credit Notes', icon: Receipt, requireCap: 'credit_notes.read' },
