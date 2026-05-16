@@ -78,6 +78,25 @@ const JournalEntryFormPage = lazy(() => import('./pages/finance/JournalEntryForm
 const JournalEntryDetailPage = lazy(() => import('./pages/finance/JournalEntryDetailPage'));
 // end finance / GL lazy.
 
+// Inventory (Wave 8f / Phase 13 — FE-A owns this block)
+const WarehouseListPage = lazy(() => import('./pages/warehouses/WarehouseListPage'));
+const WarehouseFormPage = lazy(() => import('./pages/warehouses/WarehouseFormPage'));
+const StockOverviewPage = lazy(() => import('./pages/stock/StockOverviewPage'));
+const StockAdjustPage = lazy(() => import('./pages/stock/StockAdjustPage'));
+// end inventory lazy.
+
+// Operations (Wave 8f / Phase 13 — FE-A owns this block)
+const ReceivingOrderListPage = lazy(() => import('./pages/receiving/ReceivingOrderListPage'));
+const ReceivingOrderFormPage = lazy(() => import('./pages/receiving/ReceivingOrderFormPage'));
+const ReceivingOrderDetailPage = lazy(() => import('./pages/receiving/ReceivingOrderDetailPage'));
+const ProductionRunListPage = lazy(() => import('./pages/production/ProductionRunListPage'));
+const ProductionRunFormPage = lazy(() => import('./pages/production/ProductionRunFormPage'));
+const ProductionRunDetailPage = lazy(() => import('./pages/production/ProductionRunDetailPage'));
+const ShipmentListPage = lazy(() => import('./pages/shipments/ShipmentListPage'));
+const ShipmentFormPage = lazy(() => import('./pages/shipments/ShipmentFormPage'));
+const ShipmentDetailPage = lazy(() => import('./pages/shipments/ShipmentDetailPage'));
+// end operations lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -514,6 +533,122 @@ export function AppRoutes() {
           }
         />
         {/* end finance / GL routes. */}
+        {/* Inventory (Wave 8f / Phase 13 — FE-A owns this block) */}
+        <Route
+          path="/warehouses"
+          element={
+            <ProtectedRoute>
+              <WarehouseListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/warehouses/new"
+          element={
+            <ProtectedRoute>
+              <WarehouseFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/warehouses/:id/edit"
+          element={
+            <ProtectedRoute>
+              <WarehouseFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/stock"
+          element={
+            <ProtectedRoute>
+              <StockOverviewPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/stock/adjust"
+          element={
+            <ProtectedRoute>
+              <StockAdjustPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end inventory routes. */}
+        {/* Operations (Wave 8f / Phase 13 — FE-A owns this block) */}
+        <Route
+          path="/receiving"
+          element={
+            <ProtectedRoute>
+              <ReceivingOrderListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/receiving/new"
+          element={
+            <ProtectedRoute>
+              <ReceivingOrderFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/receiving/:id"
+          element={
+            <ProtectedRoute>
+              <ReceivingOrderDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/production"
+          element={
+            <ProtectedRoute>
+              <ProductionRunListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/production/new"
+          element={
+            <ProtectedRoute>
+              <ProductionRunFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/production/:id"
+          element={
+            <ProtectedRoute>
+              <ProductionRunDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shipments"
+          element={
+            <ProtectedRoute>
+              <ShipmentListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shipments/new"
+          element={
+            <ProtectedRoute>
+              <ShipmentFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/shipments/:id"
+          element={
+            <ProtectedRoute>
+              <ShipmentDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end operations routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"
