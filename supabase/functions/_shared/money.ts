@@ -42,6 +42,22 @@ interface FormatOptions {
   showSymbol?: boolean;
 }
 
+/**
+ * Half-even (banker's) rounding on the final cent. Constitutional rule
+ * (TS1/03-workspace/00-SHARED-CONTEXT.md "Money Model"). F-Wave5-02 closed
+ * R-W3-07 by flipping per-line tax rounding from `Math.round` (half-up) to
+ * this helper in both BE handlers and the SPA preview, paired with the
+ * money-parity fixture rewrite. Identical to Math.round for non-`.5` values.
+ */
+export function roundHalfEven(n: number): number {
+  if (!Number.isFinite(n)) return n;
+  const floor = Math.floor(n);
+  const diff = n - floor;
+  if (diff < 0.5) return floor;
+  if (diff > 0.5) return floor + 1;
+  return floor % 2 === 0 ? floor : floor + 1;
+}
+
 const ZERO_DECIMAL_CURRENCIES = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK']);
 function getFractionDigits(currency: string): number {
   return ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? 0 : 2;

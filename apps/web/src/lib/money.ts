@@ -94,20 +94,42 @@ export interface TaxedTotalsCents {
 }
 
 /**
+ * Half-even (banker's) rounding on the final cent.
+ *
+ * The constitution (TS1/03-workspace/00-SHARED-CONTEXT.md "Money Model")
+ * specifies half-even. Wave 3 / Wave 4 deferred the flip because every
+ * shipped quote / line / total carried the JS `Math.round` (half-up for
+ * positive numbers) semantic; F-Wave5-02 lands the flip together with the
+ * money-parity fixtures so the new behavior is pinned everywhere.
+ *
+ * For non-boundary values this is identical to `Math.round`. Only `.5` ties
+ * differ: 262.5 → 262 (even), 263.5 → 264 (even). Negative numbers are
+ * handled symmetrically: -0.5 → 0, -1.5 → -2.
+ */
+export function roundHalfEven(n: number): number {
+  if (!Number.isFinite(n)) return n;
+  const floor = Math.floor(n);
+  const diff = n - floor;
+  if (diff < 0.5) return floor;
+  if (diff > 0.5) return floor + 1;
+  // exact .5 tie: round to even neighbor
+  return floor % 2 === 0 ? floor : floor + 1;
+}
+
+/**
  * Cross-line tax-total computation.
  *
- * Rule (TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md §1.1, R-W3-07-pending):
+ * Rule (TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md §1.1, post-F-Wave5-02):
  *   1. For each line, `line_total = qty * unit_price_cents - discount_cents`.
- *   2. For each line, `line_tax = Math.round(line_total * tax_rate)` — half-up
- *      via JS `Math.round`. The constitution names half-even (banker's) as the
- *      target; the deliberate deviation is documented at R-W3-07 and is the
- *      shape every wire & ledger row uses today. Any flip to half-even must
- *      land together with a fixture rewrite in `money-parity.test.ts`.
+ *   2. For each line, `line_tax = roundHalfEven(line_total * tax_rate)` — the
+ *      constitutional half-even rule. Phase 4 quote totals were originally
+ *      half-up via `Math.round`; F-Wave5-02 closed R-W3-07 with a paired
+ *      flip across SPA + BE + every test fixture.
  *   3. Sum `line_total` into `subtotal_cents`, sum `line_tax` into `tax_cents`.
  *      No compound rounding at the document level.
  *
  * Phase 4 quote totals and Phase 7 invoice totals both call this helper so the
- * SPA preview matches what the BE trigger math will produce at issue time.
+ * SPA preview matches what the BE recompute math produces at issue time.
  */
 export function taxTotalCents(lines: TaxableLine[]): TaxedTotalsCents {
   let subtotal = 0;
@@ -115,7 +137,7 @@ export function taxTotalCents(lines: TaxableLine[]): TaxedTotalsCents {
   for (const line of lines) {
     const line_total = line.qty * line.unit_price_cents - (line.discount_cents ?? 0);
     const rate = line.tax_rate ?? 0;
-    const line_tax = Math.round(line_total * rate);
+    const line_tax = roundHalfEven(line_total * rate);
     subtotal += line_total;
     tax += line_tax;
   }
