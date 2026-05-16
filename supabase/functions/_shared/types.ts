@@ -2107,3 +2107,310 @@ export const JournalEntryReverseSchema = z.object({
   reason: z.string().min(1).max(2000).optional(),
 }).strict();
 export type JournalEntryReverse = z.infer<typeof JournalEntryReverseSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Inventory: Warehouses
+// ============================================================================
+//
+// public.warehouses exists in prod from the Wave 0 chassis (0038). UNIQUE
+// (org_id, code). is_default at most one true per org enforced handler-side
+// (no partial unique index on the table). Address stored as jsonb.
+
+export const WarehouseSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  address: z.record(z.unknown()),
+  is_default: z.boolean(),
+  is_active: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Warehouse = z.infer<typeof WarehouseSchema>;
+
+export const WarehouseCreateSchema = z.object({
+  code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  address: z.record(z.unknown()).optional(),
+  is_default: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+}).strict();
+export type WarehouseCreate = z.infer<typeof WarehouseCreateSchema>;
+
+export const WarehousePatchSchema = z.object({
+  code: z.string().min(1).max(64).optional(),
+  label: z.string().min(1).max(255).optional(),
+  address: z.record(z.unknown()).optional(),
+  is_default: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+}).strict();
+export type WarehousePatch = z.infer<typeof WarehousePatchSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Inventory: Stock Levels
+// ============================================================================
+//
+// public.stock_levels exists in prod from the Wave 0 chassis (0038). UNIQUE
+// (item_id, warehouse_id). quantity_available is a GENERATED column
+// (quantity_on_hand - quantity_reserved) — never written by handlers.
+// READ-ONLY surface; writes flow through stock_movements + recompute trigger.
+
+export const StockLevelSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  item_id: UuidSchema,
+  warehouse_id: UuidSchema,
+  quantity_on_hand: z.union([z.string(), z.number()]),
+  quantity_reserved: z.union([z.string(), z.number()]),
+  quantity_available: z.union([z.string(), z.number()]),
+  last_counted_at: TimestampSchema.nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type StockLevel = z.infer<typeof StockLevelSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Inventory: Stock Movements
+// ============================================================================
+//
+// public.stock_movements exists from 0038. movement_type text CHECK 7 values;
+// reference_type text CHECK 5 values. RLS is SELECT-only for authenticated —
+// writes flow through the service-role boundary (admin client). Append-only:
+// no UPDATE / DELETE policies. The recompute trigger keeps stock_levels.
+
+export const StockMovementTypeSchema = z.enum([
+  'receipt',
+  'shipment',
+  'adjustment',
+  'transfer_in',
+  'transfer_out',
+  'consumption',
+  'return',
+]);
+export type StockMovementType = z.infer<typeof StockMovementTypeSchema>;
+
+export const StockMovementReferenceTypeSchema = z.enum([
+  'receiving_order',
+  'shipment',
+  'production_consumption',
+  'purchase_order',
+  'manual',
+]);
+export type StockMovementReferenceType = z.infer<typeof StockMovementReferenceTypeSchema>;
+
+export const StockMovementSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  item_id: UuidSchema,
+  warehouse_id: UuidSchema,
+  movement_type: StockMovementTypeSchema,
+  quantity: z.union([z.string(), z.number()]),
+  unit_cost_cents: CentsSchema,
+  reference_type: StockMovementReferenceTypeSchema.nullable(),
+  reference_id: UuidSchema.nullable(),
+  notes: z.string().nullable(),
+  occurred_at: TimestampSchema,
+  created_at: TimestampSchema,
+  created_by: UuidSchema.nullable(),
+});
+export type StockMovement = z.infer<typeof StockMovementSchema>;
+
+/**
+ * POST /stock-movements/adjustment — manual sign-bearing adjustment.
+ * `quantity_delta` may be negative (decrease) or positive (increase).
+ * The handler INSERTs a stock_movements row with movement_type='adjustment'
+ * and reference_type='manual'; the recompute trigger updates stock_levels.
+ */
+export const StockMovementAdjustmentSchema = z.object({
+  item_id: UuidSchema,
+  warehouse_id: UuidSchema,
+  quantity_delta: z.number(),
+  unit_cost_cents: z.number().int().nonnegative().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  occurred_at: TimestampSchema.optional(),
+}).strict().refine((v) => v.quantity_delta !== 0, {
+  message: 'quantity_delta must be non-zero',
+});
+export type StockMovementAdjustment = z.infer<typeof StockMovementAdjustmentSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Receiving Orders (ops-api)
+// ============================================================================
+//
+// public.receiving_orders exists in prod from 0003. status is the
+// `receiving_order_state` pg enum (4 values). source is the `bom_source`
+// pg enum but the column CHECK restricts to ('customer_supplied','t1_purchase')
+// — from_inventory items don't get ROs. ro_number text UNIQUE — yielded by
+// next_doc_number(org, 'receiving_order').
+
+export const ReceivingOrderStateSchema = z.enum([
+  'open', 'partial', 'received', 'cancelled',
+]);
+export type ReceivingOrderStateZ = z.infer<typeof ReceivingOrderStateSchema>;
+
+export const ReceivingOrderSourceSchema = z.enum([
+  'customer_supplied', 't1_purchase',
+]);
+export type ReceivingOrderSource = z.infer<typeof ReceivingOrderSourceSchema>;
+
+export const ReceivingOrderSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  ro_number: z.string(),
+  project_id: UuidSchema,
+  bom_item_id: UuidSchema.nullable(),
+  source: ReceivingOrderSourceSchema,
+  status: ReceivingOrderStateSchema,
+  expected_qty: z.union([z.string(), z.number()]),
+  received_qty: z.union([z.string(), z.number()]),
+  pallets_in: z.number().int().nullable(),
+  vendor: z.string().nullable(),
+  expected_at: TimestampSchema.nullable(),
+  notes: z.string().nullable(),
+  received_at: TimestampSchema.nullable(),
+  cancelled_at: TimestampSchema.nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ReceivingOrder = z.infer<typeof ReceivingOrderSchema>;
+
+export const ReceivingOrderCreateSchema = z.object({
+  project_id: UuidSchema,
+  bom_item_id: UuidSchema.nullable().optional(),
+  source: ReceivingOrderSourceSchema,
+  expected_qty: z.number().positive(),
+  pallets_in: z.number().int().nonnegative().nullable().optional(),
+  vendor: z.string().max(255).nullable().optional(),
+  expected_at: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ReceivingOrderCreate = z.infer<typeof ReceivingOrderCreateSchema>;
+
+export const ReceivingOrderPatchSchema = z.object({
+  bom_item_id: UuidSchema.nullable().optional(),
+  source: ReceivingOrderSourceSchema.optional(),
+  expected_qty: z.number().positive().optional(),
+  pallets_in: z.number().int().nonnegative().nullable().optional(),
+  vendor: z.string().max(255).nullable().optional(),
+  expected_at: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ReceivingOrderPatch = z.infer<typeof ReceivingOrderPatchSchema>;
+
+/**
+ * POST /receiving-orders/:id/receive — body carries the absolute
+ * cumulative received quantity (NOT a delta). If received_qty < expected_qty
+ * the handler transitions status to `partial`; if >= it transitions to
+ * `received` and stamps received_at.
+ */
+export const ReceivingOrderReceiveSchema = z.object({
+  received_qty: z.number().nonnegative(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ReceivingOrderReceive = z.infer<typeof ReceivingOrderReceiveSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Production Runs (ops-api)
+// ============================================================================
+//
+// public.production_runs exists in prod from 0004. status is the
+// `production_run_state` pg enum (4 values). UNIQUE INDEX
+// uniq_active_run_per_project — at most one non-terminal run per project.
+// run_number text UNIQUE — yielded by next_doc_number(org, 'production_run').
+
+export const ProductionRunStateSchema = z.enum([
+  'scheduled', 'in_progress', 'completed', 'cancelled',
+]);
+export type ProductionRunStateZ = z.infer<typeof ProductionRunStateSchema>;
+
+export const ProductionRunSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  run_number: z.string(),
+  project_id: UuidSchema,
+  status: ProductionRunStateSchema,
+  scheduled_for: TimestampSchema.nullable(),
+  started_at: TimestampSchema.nullable(),
+  completed_at: TimestampSchema.nullable(),
+  cancelled_at: TimestampSchema.nullable(),
+  qty_target: z.union([z.string(), z.number()]),
+  notes: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ProductionRun = z.infer<typeof ProductionRunSchema>;
+
+export const ProductionRunCreateSchema = z.object({
+  project_id: UuidSchema,
+  qty_target: z.number().positive(),
+  scheduled_for: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ProductionRunCreate = z.infer<typeof ProductionRunCreateSchema>;
+
+export const ProductionRunPatchSchema = z.object({
+  qty_target: z.number().positive().optional(),
+  scheduled_for: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ProductionRunPatch = z.infer<typeof ProductionRunPatchSchema>;
+
+// ============================================================================
+// Wave 8d / Phase 13 — Shipments (ops-api)
+// ============================================================================
+//
+// public.shipments exists from 0005. status is the `shipment_state` pg enum
+// (4 values). UNIQUE INDEX uniq_active_shipment_per_project — at most one
+// non-terminal shipment per project. shipment_number text UNIQUE — yielded
+// by next_doc_number(org, 'shipment'). carrier_name NOT NULL with btrim>0.
+
+export const ShipmentStateSchema = z.enum([
+  'scheduled', 'loading', 'shipped', 'cancelled',
+]);
+export type ShipmentStateZ = z.infer<typeof ShipmentStateSchema>;
+
+export const ShipmentSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  shipment_number: z.string(),
+  project_id: UuidSchema,
+  status: ShipmentStateSchema,
+  qty_shipped: z.union([z.string(), z.number()]),
+  carrier_name: z.string(),
+  tracking_number: z.string().nullable(),
+  scheduled_pickup_at: TimestampSchema.nullable(),
+  loading_started_at: TimestampSchema.nullable(),
+  shipped_at: TimestampSchema.nullable(),
+  cancelled_at: TimestampSchema.nullable(),
+  cancellation_reason: z.string().nullable(),
+  notes: z.string().nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type Shipment = z.infer<typeof ShipmentSchema>;
+
+export const ShipmentCreateSchema = z.object({
+  project_id: UuidSchema,
+  qty_shipped: z.number().positive(),
+  carrier_name: z.string().min(1).max(255),
+  tracking_number: z.string().max(255).nullable().optional(),
+  scheduled_pickup_at: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ShipmentCreate = z.infer<typeof ShipmentCreateSchema>;
+
+export const ShipmentPatchSchema = z.object({
+  qty_shipped: z.number().positive().optional(),
+  carrier_name: z.string().min(1).max(255).optional(),
+  tracking_number: z.string().max(255).nullable().optional(),
+  scheduled_pickup_at: TimestampSchema.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+}).strict();
+export type ShipmentPatch = z.infer<typeof ShipmentPatchSchema>;
+
+/** POST /shipments/:id/cancel — body carries an optional cancellation reason. */
+export const ShipmentCancelSchema = z.object({
+  cancellation_reason: z.string().min(1).max(2000).optional(),
+}).strict();
+export type ShipmentCancel = z.infer<typeof ShipmentCancelSchema>;

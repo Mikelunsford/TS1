@@ -2,7 +2,7 @@
  * inventory-api — route table.
  *
  * Wave 3 / Phase 3 sales chassis: items, item categories, units.
- * Warehouses, stock movements, stock levels land in later waves.
+ * Wave 8d / Phase 13: warehouses, stock_levels, stock_movements.
  * See TS1/09-api/00-API-CONTRACT.md §9.
  */
 
@@ -27,6 +27,21 @@ import {
   listUnits,
   patchUnit,
 } from './handlers/units.ts';
+import {
+  archiveWarehouse,
+  createWarehouse,
+  getWarehouse,
+  listWarehouses,
+  patchWarehouse,
+} from './handlers/warehouses.ts';
+import {
+  getStockLevelByItemWarehouse,
+  listStockLevels,
+} from './handlers/stock-levels.ts';
+import {
+  createStockMovementAdjustment,
+  listStockMovements,
+} from './handlers/stock-movements.ts';
 
 const BUNDLE = 'inventory-api';
 
@@ -55,4 +70,19 @@ export const routes: Route[] = [
   { method: 'POST', path: '/units', handler: createUnit },
   { method: 'PATCH', path: '/units/:id', handler: patchUnit },
   { method: 'DELETE', path: '/units/:id', handler: deleteUnit },
+
+  // Warehouses (Wave 8d)
+  { method: 'GET', path: '/warehouses', handler: listWarehouses },
+  { method: 'POST', path: '/warehouses', handler: createWarehouse },
+  { method: 'GET', path: '/warehouses/:id', handler: getWarehouse },
+  { method: 'PATCH', path: '/warehouses/:id', handler: patchWarehouse },
+  { method: 'POST', path: '/warehouses/:id/archive', handler: archiveWarehouse },
+
+  // Stock Levels (read-only) (Wave 8d)
+  { method: 'GET', path: '/stock-levels', handler: listStockLevels },
+  { method: 'GET', path: '/stock-levels/by-item-warehouse', handler: getStockLevelByItemWarehouse },
+
+  // Stock Movements (Wave 8d)
+  { method: 'GET', path: '/stock-movements', handler: listStockMovements },
+  { method: 'POST', path: '/stock-movements/adjustment', handler: createStockMovementAdjustment },
 ];
