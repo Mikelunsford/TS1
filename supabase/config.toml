@@ -153,3 +153,9 @@ import_map = "./functions/_shared/import_map.json"
 verify_jwt = false
 import_map = "./functions/_shared/import_map.json"
 # End Phase 19 (Wave 10 Session 3).
+
+# Phase 22 (Wave 10 Session 4) — C2 owns this block.
+[functions.vendor-portal-api]
+verify_jwt = true
+import_map = "./functions/_shared/import_map.json"
+# End Phase 22 (Wave 10 Session 4).

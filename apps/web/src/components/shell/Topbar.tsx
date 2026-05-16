@@ -41,6 +41,13 @@ export function Topbar() {
   const activeOrgId = me.data?.active_org_id;
   const activeOrg =
     memberships.find((m) => m.org_id === activeOrgId) ?? memberships[0];
+  // Phase 22 (Wave 10 Session 4) — C2 owns this hide-for-vendor flag.
+  // Note: vendor_user sessions are redirected to /vendor-portal by
+  // ProtectedRoute, so this <Topbar> usually doesn't render for them.
+  // This guard is belt-and-suspenders in case a vendor_user briefly
+  // sees the staff shell during a role-flip window.
+  const isVendorUser = me.data?.active_role === 'vendor_user';
+  // End Phase 22 (Wave 10 Session 4).
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-bg px-4">
@@ -54,13 +61,17 @@ export function Topbar() {
       </div>
 
       {/* Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block. */}
-      <div className="mx-4 flex-1 max-w-md">
-        <GlobalSearchBar />
-      </div>
+      {/* Phase 22 (Wave 10 Session 4) — C2 hides search for vendor_user. */}
+      {!isVendorUser && (
+        <div className="mx-4 flex-1 max-w-md">
+          <GlobalSearchBar />
+        </div>
+      )}
       {/* End Phase 17 GlobalSearchBar */}
 
       <div className="flex items-center gap-3">
-        {/* Workspace switcher */}
+        {/* Workspace switcher — Phase 22 hides for vendor_user. */}
+        {!isVendorUser && (
         <div className="relative">
           <button
             type="button"
@@ -121,9 +132,12 @@ export function Topbar() {
             </span>
           )}
         </div>
+        )}
+        {/* End workspace switcher (Phase 22 vendor_user hide). */}
 
         {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
-        {state.status === 'authenticated' && <NotificationBell />}
+        {/* Phase 22 (Wave 10 Session 4) — C2 hides NotificationBell for vendor_user. */}
+        {state.status === 'authenticated' && !isVendorUser && <NotificationBell />}
         {/* End Phase 16 (Wave 10 Session 2). */}
 
         {/* Profile menu */}

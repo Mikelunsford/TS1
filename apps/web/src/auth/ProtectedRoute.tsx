@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
 import { AppShell } from '@/components/shell/AppShell';
+// Phase 22 (Wave 10 Session 4) — C2 owns this import.
+import { useMe } from '@/lib/hooks/useMe';
+// End Phase 22 (Wave 10 Session 4).
 import { useAuth } from './AuthContext';
 
 /**
@@ -15,6 +18,12 @@ import { useAuth } from './AuthContext';
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { state } = useAuth();
   const location = useLocation();
+  // Phase 22 (Wave 10 Session 4) — C2 owns this block.
+  // vendor_user sessions are kicked to /vendor-portal so they never
+  // render staff chrome. The VendorPortalRoute guard wraps those routes
+  // in <VendorPortalShell> instead of <AppShell>.
+  const me = useMe({ enabled: state.status === 'authenticated' });
+  // End Phase 22 (Wave 10 Session 4).
 
   if (state.status === 'loading') {
     return (
@@ -27,6 +36,15 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if (state.status === 'unauthenticated') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
+
+  // Phase 22 (Wave 10 Session 4) — C2 owns this block.
+  if (
+    me.data?.active_role === 'vendor_user' &&
+    !location.pathname.startsWith('/vendor-portal')
+  ) {
+    return <Navigate to="/vendor-portal" replace />;
+  }
+  // End Phase 22 (Wave 10 Session 4).
 
   return <AppShell>{children}</AppShell>;
 }

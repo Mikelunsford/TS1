@@ -2,6 +2,9 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { ProtectedRoute } from './auth/ProtectedRoute';
+// Phase 22 vendor portal routing (Wave 10 Session 4) — C2 owns this block.
+import { VendorPortalRoute } from './auth/VendorPortalRoute';
+// End Phase 22 vendor portal routing (Wave 10 Session 4).
 import { RequireFlag } from './components/shell/RequireFlag';
 
 const PlaceholderHome = lazy(() => import('./pages/PlaceholderHome'));
@@ -115,6 +118,30 @@ const SalesByItemReportPage = lazy(() => import('./pages/reports/SalesByItemRepo
 const CashPositionReportPage = lazy(() => import('./pages/reports/CashPositionReportPage'));
 const ExpenseByCategoryReportPage = lazy(() => import('./pages/reports/ExpenseByCategoryReportPage'));
 // End Reports polish (Wave 10).
+
+// Phase 22 vendor portal pages (Wave 10 Session 4) — C2 owns this block.
+const VendorPortalDashboardPage = lazy(
+  () => import('./pages/vendor-portal/VendorPortalDashboardPage'),
+);
+const VendorPortalPurchaseOrdersPage = lazy(
+  () => import('./pages/vendor-portal/PurchaseOrdersPage'),
+);
+const VendorPortalPurchaseOrderDetailPage = lazy(
+  () => import('./pages/vendor-portal/PurchaseOrderDetailPage'),
+);
+const VendorPortalVendorBillsPage = lazy(
+  () => import('./pages/vendor-portal/VendorBillsPage'),
+);
+const VendorPortalVendorBillDetailPage = lazy(
+  () => import('./pages/vendor-portal/VendorBillDetailPage'),
+);
+const VendorPortalPaymentsPage = lazy(
+  () => import('./pages/vendor-portal/PaymentsPage'),
+);
+const VendorPortalStatementPage = lazy(
+  () => import('./pages/vendor-portal/StatementPage'),
+);
+// End Phase 22 vendor portal pages (Wave 10 Session 4).
 
 // Settings hub (Phase 15) — Phase15-FE owns this block.
 const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
@@ -752,6 +779,64 @@ export function AppRoutes() {
           }
         />
         {/* End Reports polish (Wave 10). */}
+        {/* Phase 22 vendor portal routes (Wave 10 Session 4) — C2 owns this block. */}
+        <Route
+          path="/vendor-portal"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalDashboardPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/purchase-orders"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPurchaseOrdersPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/purchase-orders/:id"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPurchaseOrderDetailPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/vendor-bills"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalVendorBillsPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/vendor-bills/:id"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalVendorBillDetailPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/payments"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalPaymentsPage />
+            </VendorPortalRoute>
+          }
+        />
+        <Route
+          path="/vendor-portal/statement"
+          element={
+            <VendorPortalRoute>
+              <VendorPortalStatementPage />
+            </VendorPortalRoute>
+          }
+        />
+        {/* End Phase 22 vendor portal routes (Wave 10 Session 4). */}
         <Route
           path="/feature-unavailable"
           element={
