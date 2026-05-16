@@ -36,6 +36,9 @@ import {
   submitQuote,
 } from '@/lib/services/quotesService';
 import { canTransition, type QuoteState } from '@/lib/workflow';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 
 type DialogKind = 'revise' | 'decline' | 'send' | 'accept' | 'convert' | null;
 
@@ -437,6 +440,10 @@ export default function QuoteDetailPage() {
         }
         pending={convertMutation.isPending}
       />
+
+      {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+      {quote && <CollaborationSection entityType="quote" entityId={quote.id} idPrefix="quote-collab" />}
+      {/* End Phase 16 (Wave 10 Session 2). */}
     </div>
   );
 }

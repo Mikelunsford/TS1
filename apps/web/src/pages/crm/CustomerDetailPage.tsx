@@ -14,6 +14,10 @@ import { listContacts } from '@/lib/services/contactsService';
 // Customer payments + credit notes (Wave 5 / 5.3b) — FE-B owns this block.
 import { CustomerCreditNotesTab, CustomerPaymentsTab } from './CustomerFinanceTabs';
 // end customer payments + credit notes block.
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CommentsTab } from '@/components/collaboration/CommentsTab';
+import { FilesTab } from '@/components/collaboration/FilesTab';
+// End Phase 16 (Wave 10 Session 2).
 
 type TabKey =
   | 'overview'
@@ -24,7 +28,8 @@ type TabKey =
   | 'invoices'
   | 'payments'
   | 'credit_notes'
-  | 'files';
+  | 'files'
+  | 'comments';
 
 const TABS: Array<{ key: TabKey; label: string; deferred?: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -37,7 +42,10 @@ const TABS: Array<{ key: TabKey; label: string; deferred?: string }> = [
   { key: 'payments', label: 'Payments' },
   { key: 'credit_notes', label: 'Credit notes' },
   // end customer payments + credit notes block.
-  { key: 'files', label: 'Files', deferred: 'Phase 5' },
+  // Phase 16 (Wave 10 Session 2) — B1 owns this block.
+  { key: 'comments', label: 'Comments' },
+  { key: 'files', label: 'Files' },
+  // End Phase 16 (Wave 10 Session 2).
 ];
 
 /**
@@ -117,6 +125,10 @@ export default function CustomerDetailPage() {
         {tab === 'payments' && id && <CustomerPaymentsTab customerId={id} />}
         {tab === 'credit_notes' && id && <CustomerCreditNotesTab customerId={id} />}
         {/* end customer payments + credit notes block. */}
+        {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+        {tab === 'comments' && id && <CommentsTab entityType="customer" entityId={id} />}
+        {tab === 'files' && id && <FilesTab entityType="customer" entityId={id} />}
+        {/* End Phase 16 (Wave 10 Session 2). */}
         {TABS.find((t) => t.key === tab)?.deferred && (
           <EmptyState
             title={`${TABS.find((t) => t.key === tab)?.label} — coming in ${TABS.find((t) => t.key === tab)?.deferred}`}

@@ -12,6 +12,9 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { productionRunKeys } from '@/lib/queryKeys/productionRuns';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   cancelProductionRun,
   completeProductionRun,
@@ -108,6 +111,10 @@ export default function ProductionRunDetailPage() {
           <p className="mt-3 whitespace-pre-wrap rounded-md bg-bg-muted p-2 text-sm">{run.notes}</p>
         )}
       </section>
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="production_run" entityId={id} idPrefix="prodrun-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

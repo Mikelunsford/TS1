@@ -18,6 +18,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { formatDate } from '@/lib/format';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { purchaseOrderKeys } from '@/lib/queryKeys/purchaseOrders';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import {
   approvePurchaseOrder,
   cancelPurchaseOrder,
@@ -199,6 +202,10 @@ export default function PurchaseOrderDetailPage() {
           />
         </>
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="purchase_order" entityId={id} idPrefix="po-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }

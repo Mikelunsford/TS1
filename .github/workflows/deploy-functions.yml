@@ -71,6 +71,9 @@ jobs:
             dashboard-api
             exports-api
             imports-api
+            # Phase 16 (Wave 10 Session 2) — B1 owns this block.
+            collaboration-api
+            # End Phase 16 (Wave 10 Session 2).
             # Wave 10 Session 2 — B2 (Phase 17 search-api)
             search-api
             # End Wave 10 Session 2 B2

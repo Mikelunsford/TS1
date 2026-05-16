@@ -5,6 +5,9 @@ import { useAuth } from '@/auth/AuthContext';
 import { useBranding } from '@/lib/hooks/useBranding';
 import { useMe } from '@/lib/hooks/useMe';
 import { useSwitchOrg } from '@/lib/hooks/useSwitchOrg';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { NotificationBell } from '@/components/collaboration/NotificationBell';
+// End Phase 16 (Wave 10 Session 2).
 // Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block.
 import { GlobalSearchBar } from './GlobalSearchBar';
 // End Phase 17 GlobalSearchBar
@@ -118,6 +121,10 @@ export function Topbar() {
             </span>
           )}
         </div>
+
+        {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+        {state.status === 'authenticated' && <NotificationBell />}
+        {/* End Phase 16 (Wave 10 Session 2). */}
 
         {/* Profile menu */}
         <div className="relative">

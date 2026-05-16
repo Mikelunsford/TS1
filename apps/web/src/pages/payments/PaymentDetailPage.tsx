@@ -20,6 +20,9 @@ import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { formatMoney } from '@/lib/money';
 import { paymentKeys } from '@/lib/queryKeys/payments';
 import { getPayment, updatePayment, voidPayment } from '@/lib/services/paymentsService';
+// Phase 16 (Wave 10 Session 2) — B1 owns this block.
+import { CollaborationSection } from '@/components/collaboration/CollaborationSection';
+// End Phase 16 (Wave 10 Session 2).
 import type { PaymentPatch } from '@/lib/types';
 
 export default function PaymentDetailPage() {
@@ -243,6 +246,10 @@ export default function PaymentDetailPage() {
           onConfirm={(patch) => editMutation.mutate(patch)}
         />
       )}
+    {/* Phase 16 (Wave 10 Session 2) — B1 owns this block. */}
+    {id && <CollaborationSection entityType="payment" entityId={id} idPrefix="payment-collab" />}
+    {/* End Phase 16 (Wave 10 Session 2). */}
+
     </div>
   );
 }
