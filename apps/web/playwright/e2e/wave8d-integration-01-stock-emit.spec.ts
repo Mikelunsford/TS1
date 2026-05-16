@@ -217,7 +217,7 @@ test.describe('@wave8d @smoke R-W8D-INTEGRATION-01 stock-movement auto-emit', ()
       .update({ status: 'partial', received_qty: 4 })
       .eq('id', ro!.id);
 
-    let { data: sm1 } = await admin
+    const { data: sm1 } = await admin
       .from('stock_movements')
       .select('quantity, movement_type, reference_type, reference_id')
       .eq('reference_type', 'receiving_order')
