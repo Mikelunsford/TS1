@@ -128,6 +128,29 @@ export type ExpenseState =
 export type JournalEntryState = 'draft' | 'posted' | 'reversed';
 
 /**
+ * Receiving order state — prod `receiving_order_state` pg enum (verified
+ * 2026-05-16, schema_migrations=0060). Four values; `received` and `cancelled`
+ * are terminal. `partial` is reachable from `open` and is a terminal-pending
+ * state on the way to `received` (continuing receipts on a partial RO transition
+ * partial -> received once the cumulative received_qty reaches expected_qty).
+ */
+export type ReceivingOrderState = 'open' | 'partial' | 'received' | 'cancelled';
+
+/**
+ * Production run state — prod `production_run_state` pg enum (verified
+ * 2026-05-16). Four values; `completed` and `cancelled` are terminal.
+ * Lifecycle: scheduled -> in_progress -> completed.
+ */
+export type ProductionRunState = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+/**
+ * Shipment state — prod `shipment_state` pg enum (verified 2026-05-16).
+ * Four values; `shipped` and `cancelled` are terminal. Lifecycle:
+ * scheduled -> loading -> shipped.
+ */
+export type ShipmentState = 'scheduled' | 'loading' | 'shipped' | 'cancelled';
+
+/**
  * Quote transitions matrix. Every (from -> to) listed here is a legal real
  * state change. Endpoints whose semantics are timestamp/activity-only (send,
  * accept) DO NOT appear here; the handler stamps state_changed_at + emits an
@@ -266,6 +289,46 @@ export const JOURNAL_ENTRY_TRANSITIONS: Record<JournalEntryState, readonly Journ
   reversed: [],
 };
 
+/**
+ * Receiving order transitions (Wave 8d / Phase 13). Lifecycle:
+ *   open -> partial -> received.
+ * `cancelled` reachable from `open` / `partial` only — a fully received RO
+ * is terminal. Continuing receipts on a partial RO drive it the rest of the
+ * way to `received` (partial -> received).
+ */
+export const RECEIVING_ORDER_TRANSITIONS: Record<ReceivingOrderState, readonly ReceivingOrderState[]> = {
+  open: ['partial', 'received', 'cancelled'],
+  partial: ['received', 'cancelled'],
+  received: [],
+  cancelled: [],
+};
+
+/**
+ * Production run transitions (Wave 8d / Phase 13). Lifecycle:
+ *   scheduled -> in_progress -> completed.
+ * `cancelled` reachable from any non-terminal state. `completed` and
+ * `cancelled` are terminal.
+ */
+export const PRODUCTION_RUN_TRANSITIONS: Record<ProductionRunState, readonly ProductionRunState[]> = {
+  scheduled: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
+
+/**
+ * Shipment transitions (Wave 8d / Phase 13). Lifecycle:
+ *   scheduled -> loading -> shipped.
+ * `cancelled` reachable from `scheduled` / `loading` only. `shipped` and
+ * `cancelled` are terminal.
+ */
+export const SHIPMENT_TRANSITIONS: Record<ShipmentState, readonly ShipmentState[]> = {
+  scheduled: ['loading', 'cancelled'],
+  loading: ['shipped', 'cancelled'],
+  shipped: [],
+  cancelled: [],
+};
+
 export type WorkflowMachine =
   | 'quote'
   | 'project'
@@ -275,7 +338,10 @@ export type WorkflowMachine =
   | 'purchase_order'
   | 'vendor_bill'
   | 'expense'
-  | 'journal_entry';
+  | 'journal_entry'
+  | 'receiving_order'
+  | 'production_run'
+  | 'shipment';
 
 type Matrix = Record<string, readonly string[]>;
 
@@ -299,6 +365,12 @@ function getMatrix(machine: WorkflowMachine): Matrix {
       return EXPENSE_TRANSITIONS as Matrix;
     case 'journal_entry':
       return JOURNAL_ENTRY_TRANSITIONS as Matrix;
+    case 'receiving_order':
+      return RECEIVING_ORDER_TRANSITIONS as Matrix;
+    case 'production_run':
+      return PRODUCTION_RUN_TRANSITIONS as Matrix;
+    case 'shipment':
+      return SHIPMENT_TRANSITIONS as Matrix;
   }
 }
 
