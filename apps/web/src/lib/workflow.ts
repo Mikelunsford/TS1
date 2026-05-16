@@ -74,6 +74,50 @@ export type InvoiceState =
 export type CreditNoteState = 'draft' | 'issued' | 'applied' | 'voided';
 
 /**
+ * Purchase order state — prod `purchase_orders.status` text CHECK (verified
+ * 2026-05-16, schema_migrations=0058). Seven values; `cancelled` and `closed`
+ * are terminal. `closed` is reached from `received` after vendor-bill
+ * finalization — accounting close-out marker.
+ */
+export type PurchaseOrderState =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'partial_received'
+  | 'received'
+  | 'cancelled'
+  | 'closed';
+
+/**
+ * Vendor bill state — prod `vendor_bills.status` text CHECK (verified
+ * 2026-05-16, schema_migrations=0058). Seven values. `overdue` is a soft
+ * indicator (set by handler / background when `due_date < today` and unpaid)
+ * and IS reachable from `approved` / `partially_paid`. `paid` and `cancelled`
+ * are terminal.
+ */
+export type VendorBillState =
+  | 'draft'
+  | 'pending'
+  | 'approved'
+  | 'partially_paid'
+  | 'paid'
+  | 'overdue'
+  | 'cancelled';
+
+/**
+ * Expense state — prod `expenses.status` text CHECK (verified 2026-05-16,
+ * schema_migrations=0058). Six values; no `cancelled` (rejected expenses can
+ * be resubmitted). `paid` and `reimbursed` are terminal payment states.
+ */
+export type ExpenseState =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'rejected'
+  | 'reimbursed'
+  | 'paid';
+
+/**
  * Quote transitions matrix. Every (from -> to) listed here is a legal real
  * state change. Endpoints whose semantics are timestamp/activity-only (send,
  * accept) DO NOT appear here; the handler stamps state_changed_at + emits an
@@ -147,7 +191,66 @@ export const CREDIT_NOTE_TRANSITIONS: Record<CreditNoteState, readonly CreditNot
   voided: [],
 };
 
-export type WorkflowMachine = 'quote' | 'project' | 'phase' | 'invoice' | 'credit_note';
+/**
+ * Purchase order transitions (Wave 7 / Phase 10). Lifecycle:
+ *   draft → submitted → approved → partial_received → received → closed.
+ * `cancelled` reachable from any non-terminal state. `submitted → draft` is
+ * a back-step for revision before approval (keeps the BUILD-ORDER intent of
+ * "edit draft" while letting an approver send it back).
+ */
+export const PURCHASE_ORDER_TRANSITIONS: Record<PurchaseOrderState, readonly PurchaseOrderState[]> = {
+  draft: ['submitted', 'cancelled'],
+  submitted: ['approved', 'draft', 'cancelled'],
+  approved: ['partial_received', 'received', 'cancelled'],
+  partial_received: ['received', 'cancelled'],
+  received: ['closed', 'cancelled'],
+  closed: [],
+  cancelled: [],
+};
+
+/**
+ * Vendor bill transitions (Wave 7 / Phase 10). Lifecycle:
+ *   draft → pending → approved → partially_paid → paid.
+ * `overdue` reachable from `approved` / `partially_paid` (set by handler when
+ * due_date < today). `cancelled` reachable from any non-terminal pre-paid
+ * state. `paid` and `cancelled` are terminal.
+ */
+export const VENDOR_BILL_TRANSITIONS: Record<VendorBillState, readonly VendorBillState[]> = {
+  draft: ['pending', 'cancelled'],
+  pending: ['approved', 'cancelled'],
+  approved: ['partially_paid', 'paid', 'overdue', 'cancelled'],
+  partially_paid: ['paid', 'overdue', 'cancelled'],
+  overdue: ['partially_paid', 'paid', 'cancelled'],
+  paid: [],
+  cancelled: [],
+};
+
+/**
+ * Expense transitions (Wave 7 / Phase 11). Lifecycle:
+ *   draft → submitted → approved → (reimbursed | paid).
+ * `rejected` reachable from `submitted`; rejected expenses can be re-edited
+ * by the submitter and re-submitted (rejected → submitted). `reimbursed` is
+ * out-of-pocket reimbursement to employee; `paid` is direct payment to vendor.
+ * Both terminal.
+ */
+export const EXPENSE_TRANSITIONS: Record<ExpenseState, readonly ExpenseState[]> = {
+  draft: ['submitted'],
+  submitted: ['approved', 'rejected'],
+  rejected: ['submitted'],
+  approved: ['reimbursed', 'paid'],
+  reimbursed: [],
+  paid: [],
+};
+
+export type WorkflowMachine =
+  | 'quote'
+  | 'project'
+  | 'phase'
+  | 'invoice'
+  | 'credit_note'
+  | 'purchase_order'
+  | 'vendor_bill'
+  | 'expense';
 
 type Matrix = Record<string, readonly string[]>;
 
@@ -163,6 +266,12 @@ function getMatrix(machine: WorkflowMachine): Matrix {
       return INVOICE_TRANSITIONS as Matrix;
     case 'credit_note':
       return CREDIT_NOTE_TRANSITIONS as Matrix;
+    case 'purchase_order':
+      return PURCHASE_ORDER_TRANSITIONS as Matrix;
+    case 'vendor_bill':
+      return VENDOR_BILL_TRANSITIONS as Matrix;
+    case 'expense':
+      return EXPENSE_TRANSITIONS as Matrix;
   }
 }
 
