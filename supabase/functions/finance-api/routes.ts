@@ -8,6 +8,7 @@
 
 import type { Route } from '../_shared/route.ts';
 import { ok } from '../_shared/responses.ts';
+import { withFlag } from '../_shared/withFlag.ts';
 import {
   listCurrencies,
   patchCurrency,
@@ -107,29 +108,29 @@ export const routes: Route[] = [
   { method: 'PATCH', path: '/payment-methods/:id', handler: patchPaymentMethod },
   { method: 'DELETE', path: '/payment-methods/:id', handler: deletePaymentMethod },
 
-  // Expense categories (Wave 7 / Phase 11)
-  { method: 'GET', path: '/expense-categories', handler: listExpenseCategories },
-  { method: 'POST', path: '/expense-categories', handler: createExpenseCategory },
-  { method: 'PATCH', path: '/expense-categories/:id', handler: patchExpenseCategory },
-  { method: 'POST', path: '/expense-categories/:id/archive', handler: archiveExpenseCategory },
+  // Expense categories (Wave 7 / Phase 11) — Phase 15 gated on finance.expenses
+  { method: 'GET', path: '/expense-categories', handler: withFlag('finance.expenses', listExpenseCategories) },
+  { method: 'POST', path: '/expense-categories', handler: withFlag('finance.expenses', createExpenseCategory) },
+  { method: 'PATCH', path: '/expense-categories/:id', handler: withFlag('finance.expenses', patchExpenseCategory) },
+  { method: 'POST', path: '/expense-categories/:id/archive', handler: withFlag('finance.expenses', archiveExpenseCategory) },
 
-  // Expenses (Wave 7 / Phase 11)
-  { method: 'GET', path: '/expenses', handler: listExpenses },
-  { method: 'POST', path: '/expenses', handler: createExpense },
-  { method: 'GET', path: '/expenses/:id', handler: getExpense },
-  { method: 'PATCH', path: '/expenses/:id', handler: patchExpense },
-  { method: 'POST', path: '/expenses/:id/submit', handler: submitExpense },
-  { method: 'POST', path: '/expenses/:id/approve', handler: approveExpense },
-  { method: 'POST', path: '/expenses/:id/reject', handler: rejectExpense },
-  { method: 'POST', path: '/expenses/:id/reimburse', handler: reimburseExpense },
-  { method: 'POST', path: '/expenses/:id/pay', handler: payExpense },
+  // Expenses (Wave 7 / Phase 11) — Phase 15 gated on finance.expenses
+  { method: 'GET', path: '/expenses', handler: withFlag('finance.expenses', listExpenses) },
+  { method: 'POST', path: '/expenses', handler: withFlag('finance.expenses', createExpense) },
+  { method: 'GET', path: '/expenses/:id', handler: withFlag('finance.expenses', getExpense) },
+  { method: 'PATCH', path: '/expenses/:id', handler: withFlag('finance.expenses', patchExpense) },
+  { method: 'POST', path: '/expenses/:id/submit', handler: withFlag('finance.expenses', submitExpense) },
+  { method: 'POST', path: '/expenses/:id/approve', handler: withFlag('finance.expenses', approveExpense) },
+  { method: 'POST', path: '/expenses/:id/reject', handler: withFlag('finance.expenses', rejectExpense) },
+  { method: 'POST', path: '/expenses/:id/reimburse', handler: withFlag('finance.expenses', reimburseExpense) },
+  { method: 'POST', path: '/expenses/:id/pay', handler: withFlag('finance.expenses', payExpense) },
 
-  // Chart of accounts (Wave 8 / Phase 12)
-  { method: 'GET', path: '/chart-of-accounts', handler: listChartOfAccounts },
-  { method: 'POST', path: '/chart-of-accounts', handler: createChartOfAccount },
-  { method: 'GET', path: '/chart-of-accounts/:id', handler: getChartOfAccount },
-  { method: 'PATCH', path: '/chart-of-accounts/:id', handler: patchChartOfAccount },
-  { method: 'POST', path: '/chart-of-accounts/:id/archive', handler: archiveChartOfAccount },
+  // Chart of accounts (Wave 8 / Phase 12) — Phase 15 gated on finance.chart_of_accounts
+  { method: 'GET', path: '/chart-of-accounts', handler: withFlag('finance.chart_of_accounts', listChartOfAccounts) },
+  { method: 'POST', path: '/chart-of-accounts', handler: withFlag('finance.chart_of_accounts', createChartOfAccount) },
+  { method: 'GET', path: '/chart-of-accounts/:id', handler: withFlag('finance.chart_of_accounts', getChartOfAccount) },
+  { method: 'PATCH', path: '/chart-of-accounts/:id', handler: withFlag('finance.chart_of_accounts', patchChartOfAccount) },
+  { method: 'POST', path: '/chart-of-accounts/:id/archive', handler: withFlag('finance.chart_of_accounts', archiveChartOfAccount) },
 
   // Journal entries (Wave 8 / Phase 12)
   { method: 'GET', path: '/journal-entries', handler: listJournalEntries },
