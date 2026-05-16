@@ -36,6 +36,12 @@ const ProjectCreatePage = lazy(() => import('./pages/projects/ProjectCreatePage'
 const ProjectDetailPage = lazy(() => import('./pages/projects/ProjectDetailPage'));
 // end projects lazy.
 
+// Invoices (Wave 5 / 5.3a) — FE-A owns this block.
+const InvoicesListPage = lazy(() => import('./pages/invoices/InvoicesListPage'));
+const InvoiceCreatePage = lazy(() => import('./pages/invoices/InvoiceCreatePage'));
+const InvoiceDetailPage = lazy(() => import('./pages/invoices/InvoiceDetailPage'));
+// end invoices lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -198,6 +204,32 @@ export function AppRoutes() {
           }
         />
         {/* end projects routes. */}
+        {/* Invoices (Wave 5 / 5.3a) — FE-A owns this block. */}
+        <Route
+          path="/invoices"
+          element={
+            <ProtectedRoute>
+              <InvoicesListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invoices/new"
+          element={
+            <ProtectedRoute>
+              <InvoiceCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/invoices/:id"
+          element={
+            <ProtectedRoute>
+              <InvoiceDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end invoices routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"
