@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { SourceJETimeline } from '@/components/finance/SourceJETimeline';
 import { VendorBillPayDialog } from '@/components/procurement/VendorBillPayDialog';
 import { VendorBillStatusBadge } from '@/components/procurement/VendorBillStatusBadge';
 import { VendorBillWorkflowButtons } from '@/components/procurement/VendorBillWorkflowButtons';
@@ -168,6 +169,8 @@ export default function VendorBillDetailPage() {
               <p className="whitespace-pre-line">{bill.notes}</p>
             </section>
           )}
+
+          <SourceJETimeline sourceType="vendor_bill" sourceId={bill.id} />
 
           <VendorBillPayDialog open={showPay} bill={bill} onClose={() => setShowPay(false)} />
         </>

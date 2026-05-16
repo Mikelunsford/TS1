@@ -9,6 +9,8 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { SourceJETimeline } from '@/components/finance/SourceJETimeline';
+import { PaymentAllocationDialog } from '@/components/payments/PaymentAllocationDialog';
 import { VoidPaymentDialog } from '@/components/payments/VoidPaymentDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -34,6 +36,7 @@ export default function PaymentDetailPage() {
 
   const [voidOpen, setVoidOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [allocateOpen, setAllocateOpen] = useState(false);
 
   function invalidate(): void {
     void qc.invalidateQueries({ queryKey: paymentKeys.detail(id) });
@@ -199,8 +202,26 @@ export default function PaymentDetailPage() {
               Void payment
             </button>
           )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setAllocateOpen(true)}
+              className="rounded-md border border-border bg-bg px-3 py-1 text-sm text-fg hover:bg-bg-muted"
+              data-testid="payment-allocate"
+            >
+              Allocate to invoices…
+            </button>
+          )}
         </div>
       </section>
+
+      <SourceJETimeline sourceType="payment" sourceId={p.id} />
+
+      <PaymentAllocationDialog
+        payment={p}
+        open={allocateOpen}
+        onClose={() => setAllocateOpen(false)}
+      />
 
       <VoidPaymentDialog
         open={voidOpen}

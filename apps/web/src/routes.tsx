@@ -70,6 +70,14 @@ const ExpenseFormPage = lazy(() => import('./pages/expenses/ExpenseFormPage'));
 const MyExpensesPage = lazy(() => import('./pages/expenses/MyExpensesPage'));
 // end expenses lazy.
 
+// Finance / GL (Wave 8c / Phase 12 — FE-A owns this block)
+const AccountListPage = lazy(() => import('./pages/finance/AccountListPage'));
+const AccountFormPage = lazy(() => import('./pages/finance/AccountFormPage'));
+const JournalEntryListPage = lazy(() => import('./pages/finance/JournalEntryListPage'));
+const JournalEntryFormPage = lazy(() => import('./pages/finance/JournalEntryFormPage'));
+const JournalEntryDetailPage = lazy(() => import('./pages/finance/JournalEntryDetailPage'));
+// end finance / GL lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -448,6 +456,64 @@ export function AppRoutes() {
           }
         />
         {/* end expenses routes. */}
+        {/* Finance / GL (Wave 8c / Phase 12 — FE-A owns this block) */}
+        <Route
+          path="/finance/accounts"
+          element={
+            <ProtectedRoute>
+              <AccountListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/accounts/new"
+          element={
+            <ProtectedRoute>
+              <AccountFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/accounts/:id"
+          element={
+            <ProtectedRoute>
+              <AccountFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/journal-entries"
+          element={
+            <ProtectedRoute>
+              <JournalEntryListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/journal-entries/new"
+          element={
+            <ProtectedRoute>
+              <JournalEntryFormPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/journal-entries/:id"
+          element={
+            <ProtectedRoute>
+              <JournalEntryDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/finance/journal-entries/:id/edit"
+          element={
+            <ProtectedRoute>
+              <JournalEntryFormPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end finance / GL routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"

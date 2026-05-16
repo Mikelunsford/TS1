@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  BookOpen,
   Boxes,
   Briefcase,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   FileText,
   FolderTree,
   Home,
+  Layers,
   Receipt,
   Settings,
   Sparkles,
@@ -97,6 +99,18 @@ const items: NavItem[] = [
     ],
   },
   // end expenses nav.
+  // Finance / GL (Wave 8c / Phase 12 — FE-A owns this block)
+  {
+    to: '/finance/accounts',
+    label: 'Finance',
+    icon: BookOpen,
+    requireCap: 'finance.coa.read',
+    children: [
+      { to: '/finance/accounts', label: 'Chart of accounts', icon: BookOpen },
+      { to: '/finance/journal-entries', label: 'Journal entries', icon: Layers },
+    ],
+  },
+  // end finance / GL nav.
   { to: '/reports', label: 'Reports', icon: BarChart3, disabled: true, wave: 8 },
   {
     to: '/settings',
