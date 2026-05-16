@@ -1,31 +1,47 @@
 /**
- * invoicing-api — /payments handlers (Wave 5 / Phase 8).
+ * invoicing-api — /payments handlers (Wave 5 / Phase 8 + Wave 8 / Phase 12).
  *
  * Endpoints:
  *   GET    /payments                — list (filters: customer_id, invoice_id,
  *                                      from, to, currency_code)
- *   POST   /payments                — record payment
+ *   POST   /payments                — record payment (optional allocations[])
  *   GET    /payments/:id            — detail
  *   PATCH  /payments/:id            — edit non-voided payment
  *   POST   /payments/:id/void       — set voided_at + void_reason
+ *   POST   /payments/:id/allocate   — add allocation rows to an existing payment
  *
  * The recompute trigger on `payments` (added in 0052) handles invoice
  * rollup automatically — handlers do NOT touch `invoices.paid_cents` or
  * `invoices.balance_cents`. The 0052 BEFORE INSERT trigger
  * `assert_invoice_payment_currency` enforces currency parity with the
- * parent invoice, surfacing as a 500/INTERNAL_ERROR on violation; clients
- * should pass the invoice's currency_code on the wire.
+ * parent invoice (the legacy 1:1 link only).
+ *
+ * Wave 8 / Phase 12 / closes R-W5-PAY-01: POST /payments accepts an
+ * optional `allocations[]` array. When present:
+ *   - SUM(allocations.amount_cents) MUST equal body.amount_cents (422).
+ *   - Every invoice_id must belong to the caller's org AND share currency.
+ *   - The payment row is inserted with invoice_id := allocations[0].invoice_id
+ *     (the 1:1 FK is still NOT NULL — first allocation acts as the
+ *     representative invoice for downstream consumers that only read
+ *     payments.invoice_id).
+ *   - payment_allocations rows are bulk-inserted; the 0059 trigger
+ *     tg_pa_recompute_invoice recomputes every touched invoice's totals.
+ * When `allocations` is absent, the legacy single-invoice path is
+ * unchanged and no allocation rows are written. recompute_invoice_totals
+ * falls back to the 1:1 link in that case.
  */
 
 import type { Ctx } from '../../_shared/route.ts';
 import { ok, err, ApiError, fromApiError } from '../../_shared/responses.ts';
 import { requireCaller } from '../../_shared/tenant.ts';
 import {
+  PaymentAllocateSchema,
   PaymentCreateSchema,
   PaymentPatchSchema,
   PaymentSchema,
   PaymentVoidSchema,
   type Payment,
+  type PaymentAllocationInput,
 } from '../../_shared/types.ts';
 import {
   admin,
@@ -179,37 +195,110 @@ export async function createPayment({ req }: Ctx): Promise<Response> {
       'POST /payments',
       body,
       async () => {
-        // Verify invoice belongs to caller's org (and its currency matches —
-        // the BEFORE trigger will also enforce, but a clean 422 is friendlier).
-        const { data: invoice, error: invErr } = await admin()
-          .from('invoices')
-          .select('id, currency_code, status')
-          .eq('id', body.invoice_id)
-          .eq('org_id', caller.orgId)
-          .is('deleted_at', null)
-          .maybeSingle();
-        if (invErr) {
-          throw new ApiError('INTERNAL_ERROR', 'invoice lookup failed', 500, {
-            detail: invErr.message,
-          });
-        }
-        if (!invoice) {
-          throw new ApiError('VALIDATION_ERROR', 'invoice_id not found in caller org', 422);
-        }
-        const inv = invoice as { currency_code: string; status: string };
-        if (inv.currency_code !== body.currency_code) {
-          throw new ApiError(
-            'VALIDATION_ERROR',
-            `payment currency_code ${body.currency_code} does not match invoice ${inv.currency_code}`,
-            422,
-          );
-        }
-        if (inv.status === 'draft' || inv.status === 'cancelled') {
-          throw new ApiError(
-            'STATE_CONFLICT',
-            `cannot record payment against invoice in ${inv.status} state`,
-            409,
-          );
+        // Wave 8: allocations branch. Validate every target invoice, then
+        // the 1:1 representative invoice (allocations[0].invoice_id).
+        let representativeInvoiceId = body.invoice_id;
+        if (body.allocations && body.allocations.length > 0) {
+          // amount_cents must match the sum of allocations.
+          const allocSum = body.allocations.reduce((s, a) => s + a.amount_cents, 0);
+          if (allocSum !== body.amount_cents) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              `SUM(allocations.amount_cents)=${allocSum} must equal amount_cents=${body.amount_cents}`,
+              422,
+            );
+          }
+
+          // Verify every allocation invoice is in caller's org + currency
+          // parity with the payment.
+          const invoiceIds = Array.from(new Set(body.allocations.map((a) => a.invoice_id)));
+          const { data: invs, error: invsErr } = await admin()
+            .from('invoices')
+            .select('id, currency_code, customer_id, status')
+            .in('id', invoiceIds)
+            .eq('org_id', caller.orgId)
+            .is('deleted_at', null);
+          if (invsErr) {
+            throw new ApiError('INTERNAL_ERROR', 'invoices lookup failed', 500, {
+              detail: invsErr.message,
+            });
+          }
+          const invRows = (invs ?? []) as {
+            id: string;
+            currency_code: string;
+            customer_id: string;
+            status: string;
+          }[];
+          if (invRows.length !== invoiceIds.length) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              'one or more allocation invoice_id values not found in caller org',
+              422,
+            );
+          }
+          for (const inv of invRows) {
+            if (inv.currency_code !== body.currency_code) {
+              throw new ApiError(
+                'VALIDATION_ERROR',
+                `invoice ${inv.id} currency ${inv.currency_code} does not match payment currency ${body.currency_code}`,
+                422,
+              );
+            }
+            if (inv.status === 'draft' || inv.status === 'cancelled') {
+              throw new ApiError(
+                'STATE_CONFLICT',
+                `cannot allocate payment against invoice ${inv.id} in ${inv.status} state`,
+                409,
+              );
+            }
+            if (inv.customer_id !== body.customer_id) {
+              throw new ApiError(
+                'VALIDATION_ERROR',
+                `invoice ${inv.id} customer does not match payment customer`,
+                422,
+              );
+            }
+          }
+          // The 1:1 payments.invoice_id FK is still NOT NULL. Pin it to
+          // the first allocation's invoice; legacy consumers that only
+          // read payments.invoice_id still see a sane referent. The
+          // body's top-level invoice_id is preserved when allocations
+          // omitted; when allocations are present, we authoritatively
+          // override it to allocations[0].invoice_id to keep the FK and
+          // the allocation set consistent.
+          representativeInvoiceId = body.allocations[0].invoice_id;
+        } else {
+          // Legacy single-invoice path. Validate the 1:1 link.
+          const { data: invoice, error: invErr } = await admin()
+            .from('invoices')
+            .select('id, currency_code, status')
+            .eq('id', body.invoice_id)
+            .eq('org_id', caller.orgId)
+            .is('deleted_at', null)
+            .maybeSingle();
+          if (invErr) {
+            throw new ApiError('INTERNAL_ERROR', 'invoice lookup failed', 500, {
+              detail: invErr.message,
+            });
+          }
+          if (!invoice) {
+            throw new ApiError('VALIDATION_ERROR', 'invoice_id not found in caller org', 422);
+          }
+          const inv = invoice as { currency_code: string; status: string };
+          if (inv.currency_code !== body.currency_code) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              `payment currency_code ${body.currency_code} does not match invoice ${inv.currency_code}`,
+              422,
+            );
+          }
+          if (inv.status === 'draft' || inv.status === 'cancelled') {
+            throw new ApiError(
+              'STATE_CONFLICT',
+              `cannot record payment against invoice in ${inv.status} state`,
+              409,
+            );
+          }
         }
 
         const paymentNumber = await nextPaymentNumber(caller.orgId);
@@ -219,7 +308,7 @@ export async function createPayment({ req }: Ctx): Promise<Response> {
             org_id: caller.orgId,
             payment_number: paymentNumber,
             customer_id: body.customer_id,
-            invoice_id: body.invoice_id,
+            invoice_id: representativeInvoiceId,
             payment_method_id: body.payment_method_id ?? null,
             paid_at: body.paid_at ?? new Date().toISOString(),
             amount_cents: body.amount_cents,
@@ -237,7 +326,191 @@ export async function createPayment({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToPayment(data as PaymentRow) } };
+        const paymentRow = data as PaymentRow;
+
+        // Bulk insert allocation rows if provided. The 0059 trigger
+        // tg_pa_recompute_invoice recomputes every touched invoice.
+        if (body.allocations && body.allocations.length > 0) {
+          const allocRows = body.allocations.map((a) => ({
+            org_id: caller.orgId,
+            payment_id: paymentRow.id,
+            invoice_id: a.invoice_id,
+            amount_cents: a.amount_cents,
+            created_by: caller.userId,
+            updated_by: caller.userId,
+          }));
+          const { error: allocErr } = await admin()
+            .from('payment_allocations')
+            .insert(allocRows);
+          if (allocErr) {
+            // Best-effort rollback of the payment row.
+            await admin()
+              .from('payments')
+              .delete()
+              .eq('id', paymentRow.id)
+              .eq('org_id', caller.orgId);
+            throw new ApiError('INTERNAL_ERROR', 'payment_allocations insert failed', 500, {
+              detail: allocErr.message,
+            });
+          }
+        }
+
+        return { status: 201, body: { data: rowToPayment(paymentRow) } };
+      },
+    );
+  } catch (e) {
+    if (e instanceof ApiError) return fromApiError(e, req);
+    throw e;
+  }
+}
+
+// =========================================================================
+// POST /payments/:id/allocate
+// =========================================================================
+/**
+ * Adds allocation rows to an existing payment. The sum of (new allocations
+ * + existing allocations + the legacy 1:1 amount if no allocations existed
+ * yet) must not exceed the payment's amount_cents — 422 otherwise.
+ *
+ * Once the first allocation lands on a previously-1:1 payment, the trigger
+ * + recompute_invoice_totals stop crediting the legacy 1:1 link for paid
+ * sums (they read live allocations instead), so callers should pass the
+ * full breakdown in one call to avoid temporary balance drift.
+ */
+export async function allocatePayment({ req, params }: Ctx): Promise<Response> {
+  try {
+    const caller = requireCaller(req);
+    requireCap(caller, 'payments.write');
+    const body = await parseBody(req, PaymentAllocateSchema);
+    const id = params.id;
+
+    return await respondWithIdempotency(
+      req,
+      caller,
+      'invoicing-api',
+      'POST /payments/:id/allocate',
+      body,
+      async () => {
+        const payment = await fetchPaymentRow(caller, id);
+        if (payment.voided_at) {
+          throw new ApiError(
+            'PAYMENT_LOCKED',
+            'payment is voided; allocations are not permitted',
+            409,
+          );
+        }
+
+        // Existing live allocations.
+        const { data: existingAllocsData, error: eErr } = await admin()
+          .from('payment_allocations')
+          .select('id, invoice_id, amount_cents')
+          .eq('payment_id', id)
+          .eq('org_id', caller.orgId)
+          .is('deleted_at', null);
+        if (eErr) {
+          throw new ApiError('INTERNAL_ERROR', 'payment_allocations lookup failed', 500, {
+            detail: eErr.message,
+          });
+        }
+        const existing = (existingAllocsData ?? []) as {
+          id: string;
+          invoice_id: string;
+          amount_cents: number;
+        }[];
+
+        // Compute the headroom.
+        const existingSum = existing.reduce((s, r) => s + Number(r.amount_cents), 0);
+        // When no allocations exist yet, the legacy 1:1 amount IS the
+        // current allocated amount (the recompute fn falls back to it).
+        // The first allocate call's totals must therefore be reconciled
+        // against the legacy 1:1 amount too.
+        const legacyHeld = existing.length === 0 ? Number(payment.amount_cents) : 0;
+        const newSum = body.allocations.reduce((s, a) => s + a.amount_cents, 0);
+        if (existingSum + legacyHeld + newSum > Number(payment.amount_cents)) {
+          throw new ApiError(
+            'VALIDATION_ERROR',
+            'allocations would exceed payment amount_cents',
+            422,
+            {
+              payment_amount_cents: Number(payment.amount_cents),
+              existing_allocations_sum: existingSum,
+              legacy_1_to_1_held: legacyHeld,
+              new_allocations_sum: newSum,
+            },
+          );
+        }
+
+        // Validate every new allocation invoice is in caller's org + matches
+        // payment currency + customer + not a UNIQUE conflict against an
+        // existing live allocation.
+        const newInvoiceIds = Array.from(new Set(body.allocations.map((a) => a.invoice_id)));
+        const { data: invs, error: iErr } = await admin()
+          .from('invoices')
+          .select('id, currency_code, customer_id, status')
+          .in('id', newInvoiceIds)
+          .eq('org_id', caller.orgId)
+          .is('deleted_at', null);
+        if (iErr) {
+          throw new ApiError('INTERNAL_ERROR', 'invoices lookup failed', 500, {
+            detail: iErr.message,
+          });
+        }
+        const invRows = (invs ?? []) as {
+          id: string;
+          currency_code: string;
+          customer_id: string;
+          status: string;
+        }[];
+        if (invRows.length !== newInvoiceIds.length) {
+          throw new ApiError(
+            'VALIDATION_ERROR',
+            'one or more allocation invoice_id values not found in caller org',
+            422,
+          );
+        }
+        for (const inv of invRows) {
+          if (inv.currency_code !== payment.currency_code) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              `invoice ${inv.id} currency ${inv.currency_code} does not match payment currency ${payment.currency_code}`,
+              422,
+            );
+          }
+          if (inv.customer_id !== payment.customer_id) {
+            throw new ApiError(
+              'VALIDATION_ERROR',
+              `invoice ${inv.id} customer does not match payment customer`,
+              422,
+            );
+          }
+        }
+
+        const allocRows = body.allocations.map((a: PaymentAllocationInput) => ({
+          org_id: caller.orgId,
+          payment_id: id,
+          invoice_id: a.invoice_id,
+          amount_cents: a.amount_cents,
+          created_by: caller.userId,
+          updated_by: caller.userId,
+        }));
+        const { error: insErr } = await admin()
+          .from('payment_allocations')
+          .insert(allocRows);
+        if (insErr) {
+          if (insErr.code === '23505') {
+            throw new ApiError(
+              'STATE_CONFLICT',
+              'payment already has a live allocation against one of these invoices',
+              409,
+            );
+          }
+          throw new ApiError('INTERNAL_ERROR', 'payment_allocations insert failed', 500, {
+            detail: insErr.message,
+          });
+        }
+
+        const refreshed = await fetchPaymentRow(caller, id);
+        return { status: 200, body: { data: rowToPayment(refreshed) } };
       },
     );
   } catch (e) {

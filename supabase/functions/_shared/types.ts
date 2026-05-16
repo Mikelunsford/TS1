@@ -1492,7 +1492,23 @@ export type Payment = z.infer<typeof PaymentSchema>;
 /**
  * Body for `POST /invoicing-api/payments`. amount_cents must be > 0.
  * paid_at defaults to server-side now() when omitted.
+ *
+ * Wave 8 / Phase 12 / closes R-W5-PAY-01: optional `allocations[]` array
+ * lets a single payment land against multiple invoices. When present,
+ * SUM(allocations.amount_cents) must equal body.amount_cents (handler
+ * enforces 422 on mismatch) and every invoice_id must belong to the
+ * caller's org with currency_code matching the payment. The handler
+ * inserts the payment with invoice_id := allocations[0].invoice_id
+ * (1:1 FK is still NOT NULL) and then bulk-inserts payment_allocations
+ * rows. When `allocations` is omitted, the legacy single-invoice path
+ * is unchanged.
  */
+export const PaymentAllocationInputSchema = z.object({
+  invoice_id: UuidSchema,
+  amount_cents: z.number().int().positive(),
+}).strict();
+export type PaymentAllocationInput = z.infer<typeof PaymentAllocationInputSchema>;
+
 export const PaymentCreateSchema = z.object({
   customer_id: UuidSchema,
   invoice_id: UuidSchema,
@@ -1504,8 +1520,40 @@ export const PaymentCreateSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   external_ref: z.string().max(120).nullable().optional(),
   exchange_rate: z.number().positive().nullable().optional(),
+  allocations: z.array(PaymentAllocationInputSchema).min(1).optional(),
 });
 export type PaymentCreate = z.infer<typeof PaymentCreateSchema>;
+
+/**
+ * Body for `POST /invoicing-api/payments/:id/allocate`. Adds allocation
+ * rows to an existing payment. SUM(new allocations) + SUM(existing
+ * allocations) + (if no allocations existed yet, the legacy 1:1
+ * amount_cents) must not exceed the payment's amount_cents — handler
+ * returns 422 otherwise.
+ */
+export const PaymentAllocateSchema = z.object({
+  allocations: z.array(PaymentAllocationInputSchema).min(1),
+}).strict();
+export type PaymentAllocate = z.infer<typeof PaymentAllocateSchema>;
+
+/**
+ * payment_allocations row. Mirrors public.payment_allocations
+ * (migration 0059). One row per (payment, invoice) live allocation.
+ */
+export const PaymentAllocationSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  payment_id: UuidSchema,
+  invoice_id: UuidSchema,
+  amount_cents: CentsSchema,
+  notes: z.string().nullable(),
+  created_at: TimestampSchema,
+  created_by: UuidSchema.nullable(),
+  updated_at: TimestampSchema,
+  updated_by: UuidSchema.nullable(),
+  deleted_at: TimestampSchema.nullable(),
+});
+export type PaymentAllocation = z.infer<typeof PaymentAllocationSchema>;
 
 /**
  * Patch body for `PATCH /invoicing-api/payments/:id`. Allowed only while
@@ -1913,3 +1961,149 @@ export const ExpenseRejectSchema = z.object({
   reason: z.string().min(1).max(2000),
 }).strict();
 export type ExpenseReject = z.infer<typeof ExpenseRejectSchema>;
+
+// ============================================================================
+// Wave 8 / Phase 12 — Chart of Accounts
+// ============================================================================
+//
+// public.chart_of_accounts exists in prod from the Wave 0 chassis (verified
+// 2026-05-16, schema_migrations=0058). account_type CHECK is 6 values
+// (asset/liability/equity/revenue/expense/cogs). parent_id is a self-FK ON
+// DELETE SET NULL — moves and deletes preserve the tree. is_system marks
+// chassis-seeded accounts that handlers refuse to edit/archive.
+
+export const ChartOfAccountTypeSchema = z.enum([
+  'asset', 'liability', 'equity', 'revenue', 'expense', 'cogs',
+]);
+export type ChartOfAccountType = z.infer<typeof ChartOfAccountTypeSchema>;
+
+export const ChartOfAccountSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  account_code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  account_type: ChartOfAccountTypeSchema,
+  parent_id: UuidSchema.nullable(),
+  currency_code: z.string().length(3).nullable(),
+  description: z.string().nullable(),
+  is_active: z.boolean(),
+  is_system: z.boolean(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type ChartOfAccount = z.infer<typeof ChartOfAccountSchema>;
+
+export const ChartOfAccountCreateSchema = z.object({
+  account_code: z.string().min(1).max(64),
+  label: z.string().min(1).max(255),
+  account_type: ChartOfAccountTypeSchema,
+  parent_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  is_active: z.boolean().optional(),
+}).strict();
+export type ChartOfAccountCreate = z.infer<typeof ChartOfAccountCreateSchema>;
+
+export const ChartOfAccountPatchSchema = z.object({
+  account_code: z.string().min(1).max(64).optional(),
+  label: z.string().min(1).max(255).optional(),
+  account_type: ChartOfAccountTypeSchema.optional(),
+  parent_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  is_active: z.boolean().optional(),
+}).strict();
+export type ChartOfAccountPatch = z.infer<typeof ChartOfAccountPatchSchema>;
+
+// ============================================================================
+// Wave 8 / Phase 12 — Journal Entries
+// ============================================================================
+//
+// public.journal_entries + public.journal_entry_lines exist in prod from the
+// Wave 0 chassis (verified 2026-05-16). status text CHECK is 3 values
+// (draft/posted/reversed). source_type text CHECK is 6 values
+// (invoice/payment/expense/credit_note/manual/vendor_bill). Lines have CHECKs
+// preventing both debit and credit > 0 simultaneously and requiring at least
+// one > 0. check_journal_balance(p_entry_id uuid) RPC raises an exception on
+// imbalance — the post handler calls it and converts the raise to a 422.
+
+export const JournalEntryStateSchema = z.enum(['draft', 'posted', 'reversed']);
+export type JournalEntryStateZ = z.infer<typeof JournalEntryStateSchema>;
+
+export const JournalEntrySourceTypeSchema = z.enum([
+  'invoice', 'payment', 'expense', 'credit_note', 'manual', 'vendor_bill',
+]);
+export type JournalEntrySourceType = z.infer<typeof JournalEntrySourceTypeSchema>;
+
+export const JournalEntryLineSchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  journal_entry_id: UuidSchema,
+  account_id: UuidSchema,
+  debit_cents: CentsSchema,
+  credit_cents: CentsSchema,
+  memo: z.string().nullable(),
+  position: z.number().int().nonnegative(),
+});
+export type JournalEntryLine = z.infer<typeof JournalEntryLineSchema>;
+
+/** Input shape for a journal entry line on create/patch. */
+export const JournalEntryLineInputSchema = z.object({
+  account_id: UuidSchema,
+  debit_cents: z.number().int().nonnegative(),
+  credit_cents: z.number().int().nonnegative(),
+  memo: z.string().max(2000).nullable().optional(),
+  position: z.number().int().nonnegative().optional(),
+}).strict().refine(
+  (l) => (l.debit_cents > 0) !== (l.credit_cents > 0),
+  { message: 'exactly one of debit_cents / credit_cents must be > 0' },
+);
+export type JournalEntryLineInput = z.infer<typeof JournalEntryLineInputSchema>;
+
+export const JournalEntrySchema = z.object({
+  id: UuidSchema,
+  org_id: UuidSchema,
+  entry_number: z.string(),
+  entry_date: z.string().date(),
+  description: z.string().nullable(),
+  status: JournalEntryStateSchema,
+  source_type: JournalEntrySourceTypeSchema.nullable(),
+  source_id: UuidSchema.nullable(),
+  currency_code: z.string().length(3),
+  posted_at: TimestampSchema.nullable(),
+  reversed_at: TimestampSchema.nullable(),
+  reversed_by_entry_id: UuidSchema.nullable(),
+  created_at: TimestampSchema,
+  updated_at: TimestampSchema,
+});
+export type JournalEntry = z.infer<typeof JournalEntrySchema>;
+
+export const JournalEntryCreateSchema = z.object({
+  entry_date: z.string().date().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  source_type: JournalEntrySourceTypeSchema.optional(),
+  source_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  lines: z.array(JournalEntryLineInputSchema).min(2),
+}).strict();
+export type JournalEntryCreate = z.infer<typeof JournalEntryCreateSchema>;
+
+export const JournalEntryPatchSchema = z.object({
+  entry_date: z.string().date().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  source_type: JournalEntrySourceTypeSchema.optional(),
+  source_id: UuidSchema.nullable().optional(),
+  currency_code: z.string().length(3).optional(),
+  lines: z.array(JournalEntryLineInputSchema).min(2).optional(),
+}).strict();
+export type JournalEntryPatch = z.infer<typeof JournalEntryPatchSchema>;
+
+/** POST /journal-entries/:id/post — empty body (strict). */
+export const JournalEntryPostSchema = z.object({}).strict();
+export type JournalEntryPost = z.infer<typeof JournalEntryPostSchema>;
+
+/** POST /journal-entries/:id/reverse — optional reversal reason text. */
+export const JournalEntryReverseSchema = z.object({
+  reason: z.string().min(1).max(2000).optional(),
+}).strict();
+export type JournalEntryReverse = z.infer<typeof JournalEntryReverseSchema>;
