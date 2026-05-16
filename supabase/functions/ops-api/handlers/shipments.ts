@@ -43,6 +43,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const BUNDLE = 'ops-api';
 const SH_COLS =
@@ -126,19 +127,21 @@ export async function createShipment({ req }: Ctx): Promise<Response> {
     }
     if (!project) throw new ApiError('NOT_FOUND', 'project not found in org', 404);
 
-    const { data: numData, error: numErr } = await admin().rpc('next_doc_number', {
-      p_org_id: caller.orgId,
-      p_doc_type: 'shipment',
-    });
-    if (numErr || !numData) {
-      throw new ApiError('INTERNAL_ERROR', 'next_doc_number shipment failed', 500, {
-        detail: numErr?.message,
-      });
+    let shipmentNumber: string;
+    try {
+      shipmentNumber = await getNextDocNumber(admin(), caller.orgId, 'shipment');
+    } catch (e) {
+      if (e instanceof NumberingError) {
+        throw new ApiError('INTERNAL_ERROR', 'next_doc_number shipment failed', 500, {
+          detail: e.message,
+        });
+      }
+      throw e;
     }
 
     const insertRow = {
       org_id: caller.orgId,
-      shipment_number: numData as string,
+      shipment_number: shipmentNumber,
       project_id: body.project_id,
       status: 'scheduled' as const,
       qty_shipped: body.qty_shipped,

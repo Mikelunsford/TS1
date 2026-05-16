@@ -48,6 +48,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 
 const CREDIT_NOTE_COLS =
   'id, org_id, credit_note_number, customer_id, invoice_id, issue_date, status, reason, ' +
@@ -104,16 +105,16 @@ async function fetchCreditNoteRow(caller: Caller, id: string): Promise<CreditNot
 }
 
 async function nextCreditNoteNumber(orgId: string): Promise<string> {
-  const { data, error } = await admin().rpc('next_doc_number', {
-    p_org_id: orgId,
-    p_doc_type: 'credit_note',
-  });
-  if (error || typeof data !== 'string') {
-    throw new ApiError('INTERNAL_ERROR', 'next_doc_number credit_note failed', 500, {
-      detail: error?.message,
-    });
+  try {
+    return await getNextDocNumber(admin(), orgId, 'credit_note');
+  } catch (e) {
+    if (e instanceof NumberingError) {
+      throw new ApiError('INTERNAL_ERROR', 'next_doc_number credit_note failed', 500, {
+        detail: e.message,
+      });
+    }
+    throw e;
   }
-  return data;
 }
 
 // =========================================================================

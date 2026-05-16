@@ -274,9 +274,19 @@ test.describe('@wave5 @smoke F-Wave5-07 quote → invoice end-to-end', () => {
     );
     expect(fromQuoteRes.status(), 'POST /invoices/from-quote returns 201').toBe(201);
     const invoice = ((await fromQuoteRes.json()) as {
-      data: { id: string; total_cents: number; subtotal_cents: number; tax_cents: number };
+      data: {
+        id: string;
+        invoice_number: string;
+        total_cents: number;
+        subtotal_cents: number;
+        tax_cents: number;
+      };
     }).data;
     expect(invoice.id).toBeTruthy();
+    // Phase 14: invoice_number must match the unified `next_doc_number()`
+    // shape — `INV-YYYY-NNNNN` (yearly reset, 5-digit pad). See
+    // supabase/migrations/0064_unify_numbering.sql.
+    expect(invoice.invoice_number).toMatch(/^INV-\d{4}-\d{5}$/);
 
     // --------------------------------------------------------------------- //
     // 7. Assert invoice lines copied + totals match quote totals.

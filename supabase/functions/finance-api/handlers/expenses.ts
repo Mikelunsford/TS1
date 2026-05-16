@@ -22,6 +22,7 @@ import {
   requireCap,
   respondWithIdempotency,
 } from '../../_shared/handler-helpers.ts';
+import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
 import {
   ExpenseCreateSchema,
   ExpensePatchSchema,
@@ -75,19 +76,21 @@ export async function createExpense({ req }: Ctx): Promise<Response> {
   const body = await parseBody(req, ExpenseCreateSchema);
 
   return respondWithIdempotency(req, caller, BUNDLE, 'POST /expenses', body, async () => {
-    const { data: numData, error: numErr } = await admin().rpc('next_doc_number', {
-      p_org_id: caller.orgId,
-      p_doc_type: 'expense',
-    });
-    if (numErr || !numData) {
-      throw new ApiError('INTERNAL_ERROR', 'next_doc_number expense failed', 500, { db: numErr?.message });
+    let expenseNumber: string;
+    try {
+      expenseNumber = await getNextDocNumber(admin(), caller.orgId, 'expense');
+    } catch (e) {
+      if (e instanceof NumberingError) {
+        throw new ApiError('INTERNAL_ERROR', 'next_doc_number expense failed', 500, { db: e.message });
+      }
+      throw e;
     }
 
     const { data, error } = await admin()
       .from('expenses')
       .insert({
         org_id: caller.orgId,
-        expense_number: numData as string,
+        expense_number: expenseNumber,
         category_id: body.category_id ?? null,
         vendor_id: body.vendor_id ?? null,
         project_id: body.project_id ?? null,
