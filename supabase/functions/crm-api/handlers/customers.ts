@@ -37,6 +37,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
 
 // `customer_number` is not a column on `public.customers` in the current
 // schema; the contract surface still exposes it as nullable so we always
@@ -184,6 +185,15 @@ export async function createCustomer({ req }: Ctx): Promise<Response> {
           });
         }
         const customer = rowToCustomer(data as CustomerRow);
+        // Phase 17 step-8: audit_log write (Wave 10 Session 2 B2).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'customer',
+          entity_id: customer.id,
+          action: 'create',
+          after: customer as unknown as Record<string, unknown>,
+        });
         return { status: 201, body: { data: customer } };
       },
     );
@@ -209,7 +219,7 @@ export async function patchCustomer({ req, params }: Ctx): Promise<Response> {
       async () => {
         // Confirm visibility before patching so RLS-hidden rows return 404
         // (architecture §0.1 "NOT_FOUND or RLS hid it; indistinguishable").
-        await fetchCustomerRow(caller, id);
+        const beforeRow = await fetchCustomerRow(caller, id);
 
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.display_name !== undefined) patch.display_name = body.display_name;
@@ -235,7 +245,18 @@ export async function patchCustomer({ req, params }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToCustomer(data as CustomerRow) } };
+        const after = rowToCustomer(data as CustomerRow);
+        // Phase 17 step-8: audit_log write (Wave 10 Session 2 B2).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'customer',
+          entity_id: id,
+          action: 'update',
+          before: rowToCustomer(beforeRow) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {
@@ -285,6 +306,15 @@ async function archiveOrRestore(
             { detail: error?.message },
           );
         }
+        // Phase 17 step-8: audit_log write (Wave 10 Session 2 B2).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'customer',
+          entity_id: id,
+          action: archive ? 'archive' : 'restore',
+          after: { is_archived: archive },
+        });
         return { status: 200, body: { data: rowToCustomer(data as CustomerRow) } };
       },
     );

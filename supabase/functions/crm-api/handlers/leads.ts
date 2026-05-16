@@ -36,6 +36,7 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
 
 const LEAD_COLS =
   'id, org_id, lead_number, display_name, company_name, email, phone, source, status, ' +
@@ -188,7 +189,17 @@ export async function createLead({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToLead(data as LeadRow) } };
+        const lead = rowToLead(data as LeadRow);
+        // Phase 17 step-8: audit_log write (Wave 10 Session 2 B2).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'lead',
+          entity_id: lead.id,
+          action: 'create',
+          after: lead as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: lead } };
       },
     );
   } catch (e) {
