@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 import { ExpenseStatusBadge } from '@/components/expenses/ExpenseStatusBadge';
 import { ExpenseWorkflowButtons } from '@/components/expenses/ExpenseWorkflowButtons';
+import { SourceJETimeline } from '@/components/finance/SourceJETimeline';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -213,6 +214,8 @@ export default function ExpenseDetailPage() {
               <p className="whitespace-pre-line">{expense.notes}</p>
             </section>
           )}
+
+          <SourceJETimeline sourceType="expense" sourceId={expense.id} />
 
           {rejectOpen && (
             <div

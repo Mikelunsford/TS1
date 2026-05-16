@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { SourceJETimeline } from '@/components/finance/SourceJETimeline';
 import { ConvertFromProjectDialog } from '@/components/invoices/ConvertFromProjectDialog';
 import { ConvertFromQuoteDialog } from '@/components/invoices/ConvertFromQuoteDialog';
 import { InvoiceLineEditor } from '@/components/invoices/InvoiceLineEditor';
@@ -43,13 +44,14 @@ import {
 } from '@/lib/services/invoicesService';
 import { listPayments } from '@/lib/services/paymentsService';
 
-type Tab = 'overview' | 'lines' | 'payments' | 'credit_notes' | 'versions' | 'history';
+type Tab = 'overview' | 'lines' | 'payments' | 'credit_notes' | 'journal' | 'versions' | 'history';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'lines', label: 'Line items' },
   { id: 'payments', label: 'Payments' },
   { id: 'credit_notes', label: 'Credit notes' },
+  { id: 'journal', label: 'Journal entries' },
   { id: 'versions', label: 'Versions' },
   { id: 'history', label: 'History' },
 ];
@@ -290,6 +292,10 @@ export default function InvoiceDetailPage() {
 
           {tab === 'credit_notes' && (
             <CreditNotesTab invoiceId={invoice.id} currency={invoice.currency_code} />
+          )}
+
+          {tab === 'journal' && (
+            <SourceJETimeline sourceType="invoice" sourceId={invoice.id} />
           )}
 
           {tab === 'versions' && <VersionsTab invoiceId={invoice.id} currency={invoice.currency_code} />}
