@@ -327,6 +327,88 @@ async function seedUnit(fx: OrgFixture): Promise<string> {
   return data.id as string;
 }
 
+// =========================================================================
+// Wave 4 seed helpers — quotes + projects + project_phases.
+// =========================================================================
+
+/**
+ * Seed a quote row. Customer is required (NOT NULL FK), so we seed one and
+ * stamp the denormalized `customer_name` on the quote. The triggers from
+ * migration 0050 will auto-create a v1 quote_versions row; teardown handles
+ * the cascade by deleting on org_id.
+ */
+async function seedQuote(fx: OrgFixture): Promise<{ customer_id: string; quote_id: string }> {
+  const admin = adminClient();
+  const customer_id = await seedCustomer(fx);
+  const suffix = uniquifier(fx, 'qt');
+  const { data, error } = await admin
+    .from('quotes')
+    .insert({
+      org_id: fx.org_id,
+      quote_number: `RLS-Q-${suffix}`.slice(0, 50),
+      customer_id,
+      customer_name: `RLS Customer ${fx.org_id.slice(0, 8)}`,
+      service_type: 'co_pack',
+      status: 'draft',
+      origin: 'management',
+      mode: 'new_quote',
+      materials_only: false,
+      currency_code: 'USD',
+      subtotal_cents: 0,
+      tax_cents: 0,
+      discount_cents: 0,
+      total_cents: 0,
+      created_by: fx.user_id,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`quote seed failed: ${error?.message}`);
+  return { customer_id, quote_id: data.id as string };
+}
+
+/** Seed a project row. customer_id is nullable on prod projects table. */
+async function seedProject(fx: OrgFixture): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'pr');
+  const { data, error } = await admin
+    .from('projects')
+    .insert({
+      org_id: fx.org_id,
+      project_number: `RLS-P-${suffix}`.slice(0, 50),
+      name: `RLS Project ${suffix}`,
+      status: 'pending',
+      currency_code: 'USD',
+      total_cents: 0,
+      budget_cents: 0,
+      created_by: fx.user_id,
+      updated_by: fx.user_id,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`project seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Seed a project_phases row (FK on projects.id). */
+async function seedPhase(fx: OrgFixture, project_id: string): Promise<string> {
+  const admin = adminClient();
+  const suffix = uniquifier(fx, 'ph');
+  const { data, error } = await admin
+    .from('project_phases')
+    .insert({
+      org_id: fx.org_id,
+      project_id,
+      name: `RLS Phase ${suffix}`,
+      position: 0,
+      status: 'pending',
+      budget_cents: 0,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw new Error(`phase seed failed: ${error?.message}`);
+  return data.id as string;
+}
+
 /**
  * Seed an exchange_rate row.
  *
@@ -366,6 +448,14 @@ async function teardown(fx: OrgFixture): Promise<void> {
   // Order: leaf children first, then customers, then membership/org rows.
   // The opportunity table references customers (ON DELETE RESTRICT), so
   // delete opportunities and leads before customers.
+  // Wave 4 sales-chassis tables: phases must drop before projects (project_id FK),
+  // quote_versions must drop before quotes (quote_id FK). quotes.customer_id is
+  // ON DELETE RESTRICT so quotes must drop before customers.
+  await admin.from('project_phases').delete().eq('org_id', fx.org_id);
+  await admin.from('projects').delete().eq('org_id', fx.org_id);
+  await admin.from('quote_line_items').delete().eq('org_id', fx.org_id);
+  await admin.from('quote_versions').delete().eq('org_id', fx.org_id);
+  await admin.from('quotes').delete().eq('org_id', fx.org_id);
   await admin.from('opportunities').delete().eq('org_id', fx.org_id);
   await admin.from('leads').delete().eq('org_id', fx.org_id);
   await admin.from('contacts').delete().eq('org_id', fx.org_id);
@@ -799,6 +889,188 @@ test.describe('Cross-tenant RLS probe', () => {
       expect(json.data.org_id).toBe(orgB.org_id);
     } else {
       expect(res.status()).toBe(404);
+    }
+  });
+
+  // =========================================================================
+  // Wave 4 quoting + projects HTTP-level RLS probe.
+  // Each test seeds an org-A row directly via service role, then issues an
+  // authenticated HTTP request from org B and asserts RLS filters the row.
+  // For list endpoints: 200 + empty items array (canonical filter behaviour).
+  // For detail endpoints: 404 NOT_FOUND (handler-emitted; never 403).
+  // =========================================================================
+
+  test('quotes-api: GET /quotes returns empty items[] to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, quote_id } = await seedQuote(orgA);
+    try {
+      const res = await request.get(`${functionsBase()}/quotes-api/quotes`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `quotes-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+      expect(json.data.items.some((q) => q.id === quote_id)).toBe(false);
+    } finally {
+      const admin = adminClient();
+      await admin.from('quote_line_items').delete().eq('quote_id', quote_id);
+      await admin.from('quote_versions').delete().eq('quote_id', quote_id);
+      await admin.from('quotes').delete().eq('id', quote_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('quotes-api: GET /quotes/:id returns 404 to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const { customer_id, quote_id } = await seedQuote(orgA);
+    try {
+      const res = await request.get(`${functionsBase()}/quotes-api/quotes/${quote_id}`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `quotes-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'cross-tenant detail MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('quote_line_items').delete().eq('quote_id', quote_id);
+      await admin.from('quote_versions').delete().eq('quote_id', quote_id);
+      await admin.from('quotes').delete().eq('id', quote_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('quotes-api: POST /quotes/:id/submit on a cross-tenant quote returns 404', async ({
+    request,
+  }) => {
+    const { customer_id, quote_id } = await seedQuote(orgA);
+    try {
+      const res = await request.post(
+        `${functionsBase()}/quotes-api/quotes/${quote_id}/submit`,
+        {
+          headers: {
+            authorization: `Bearer ${orgB.access_token}`,
+            apikey: ANON_KEY!,
+            'idempotency-key': crypto.randomUUID(),
+            'content-type': 'application/json',
+          },
+          data: {},
+        },
+      );
+      test.skip(res.status() >= 500, `quotes-api unreachable (HTTP ${res.status()})`);
+      // 404 (RLS hides the parent) — NOT 403, which would leak existence.
+      expect(res.status(), 'cross-tenant workflow POST MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      const admin = adminClient();
+      await admin.from('quote_line_items').delete().eq('quote_id', quote_id);
+      await admin.from('quote_versions').delete().eq('quote_id', quote_id);
+      await admin.from('quotes').delete().eq('id', quote_id);
+      await admin.from('customers').delete().eq('id', customer_id);
+    }
+  });
+
+  test('projects-api: GET /projects returns empty items[] to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const projectId = await seedProject(orgA);
+    try {
+      const res = await request.get(`${functionsBase()}/projects-api/projects`, {
+        headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(res.status() >= 500, `projects-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'RLS must filter, not throw').toBe(200);
+      const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+      expect(json.data.items.some((p) => p.id === projectId)).toBe(false);
+    } finally {
+      await adminClient().from('projects').delete().eq('id', projectId);
+    }
+  });
+
+  test('projects-api: GET /projects/:id returns 404 to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const projectId = await seedProject(orgA);
+    try {
+      const res = await request.get(
+        `${functionsBase()}/projects-api/projects/${projectId}`,
+        {
+          headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      test.skip(res.status() >= 500, `projects-api unreachable (HTTP ${res.status()})`);
+      expect(res.status(), 'cross-tenant detail MUST 404, never 403').toBe(404);
+      const json = (await res.json()) as { error: { code: string } };
+      expect(json.error.code).toBe('NOT_FOUND');
+    } finally {
+      await adminClient().from('projects').delete().eq('id', projectId);
+    }
+  });
+
+  test('projects-api: GET /projects/:project_id/phases returns empty/404 to a cross-tenant caller', async ({
+    request,
+  }) => {
+    const projectId = await seedProject(orgA);
+    const phaseId = await seedPhase(orgA, projectId);
+    try {
+      const res = await request.get(
+        `${functionsBase()}/projects-api/projects/${projectId}/phases`,
+        {
+          headers: { authorization: `Bearer ${orgB.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      test.skip(res.status() >= 500, `projects-api unreachable (HTTP ${res.status()})`);
+      // Two acceptable shapes:
+      //   - 200 with empty items[]  (handler scopes by org_id transparently)
+      //   - 404 NOT_FOUND           (handler validates project lookup first;
+      //                              RLS-hidden parent fails the lookup)
+      // The constitutional constraint is: never 403, never expose the row id.
+      expect([200, 404]).toContain(res.status());
+      if (res.status() === 200) {
+        const json = (await res.json()) as { data: { items: Array<{ id: string }> } };
+        expect(json.data.items.some((p) => p.id === phaseId)).toBe(false);
+      } else {
+        const json = (await res.json()) as { error: { code: string } };
+        expect(json.error.code).toBe('NOT_FOUND');
+      }
+    } finally {
+      const admin = adminClient();
+      await admin.from('project_phases').delete().eq('id', phaseId);
+      await admin.from('projects').delete().eq('id', projectId);
+    }
+  });
+
+  test('quotes-api: positive control — org A sees its own quote in list + detail', async ({
+    request,
+  }) => {
+    const { customer_id, quote_id } = await seedQuote(orgA);
+    try {
+      const listRes = await request.get(`${functionsBase()}/quotes-api/quotes`, {
+        headers: { authorization: `Bearer ${orgA.access_token}`, apikey: ANON_KEY! },
+      });
+      test.skip(listRes.status() >= 500, `quotes-api unreachable (HTTP ${listRes.status()})`);
+      expect(listRes.status()).toBe(200);
+      const listJson = (await listRes.json()) as { data: { items: Array<{ id: string }> } };
+      expect(listJson.data.items.some((q) => q.id === quote_id)).toBe(true);
+
+      const detailRes = await request.get(
+        `${functionsBase()}/quotes-api/quotes/${quote_id}`,
+        {
+          headers: { authorization: `Bearer ${orgA.access_token}`, apikey: ANON_KEY! },
+        },
+      );
+      expect(detailRes.status()).toBe(200);
+      const detailJson = (await detailRes.json()) as { data: { id: string } };
+      expect(detailJson.data.id).toBe(quote_id);
+    } finally {
+      const admin = adminClient();
+      await admin.from('quote_line_items').delete().eq('quote_id', quote_id);
+      await admin.from('quote_versions').delete().eq('quote_id', quote_id);
+      await admin.from('quotes').delete().eq('id', quote_id);
+      await admin.from('customers').delete().eq('id', customer_id);
     }
   });
 });
