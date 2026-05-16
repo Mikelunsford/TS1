@@ -42,6 +42,15 @@ const InvoiceCreatePage = lazy(() => import('./pages/invoices/InvoiceCreatePage'
 const InvoiceDetailPage = lazy(() => import('./pages/invoices/InvoiceDetailPage'));
 // end invoices lazy.
 
+// Payments+CreditNotes (Wave 5 / 5.3b) — FE-B owns this block.
+const PaymentsListPage = lazy(() => import('./pages/payments/PaymentsListPage'));
+const PaymentCreatePage = lazy(() => import('./pages/payments/PaymentCreatePage'));
+const PaymentDetailPage = lazy(() => import('./pages/payments/PaymentDetailPage'));
+const CreditNotesListPage = lazy(() => import('./pages/credit-notes/CreditNotesListPage'));
+const CreditNoteCreatePage = lazy(() => import('./pages/credit-notes/CreditNoteCreatePage'));
+const CreditNoteDetailPage = lazy(() => import('./pages/credit-notes/CreditNoteDetailPage'));
+// end payments + credit notes lazy.
+
 // Settings (Wave 3) — FE-B owns this block.
 const SettingsIndexRedirect = lazy(() => import('./pages/settings/SettingsIndexRedirect'));
 const CurrenciesPage = lazy(() => import('./pages/settings/CurrenciesPage'));
@@ -230,6 +239,56 @@ export function AppRoutes() {
           }
         />
         {/* end invoices routes. */}
+        {/* Payments+CreditNotes (Wave 5 / 5.3b) — FE-B owns this block. */}
+        <Route
+          path="/payments"
+          element={
+            <ProtectedRoute>
+              <PaymentsListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payments/new"
+          element={
+            <ProtectedRoute>
+              <PaymentCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payments/:id"
+          element={
+            <ProtectedRoute>
+              <PaymentDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/credit-notes"
+          element={
+            <ProtectedRoute>
+              <CreditNotesListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/credit-notes/new"
+          element={
+            <ProtectedRoute>
+              <CreditNoteCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/credit-notes/:id"
+          element={
+            <ProtectedRoute>
+              <CreditNoteDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* end payments + credit notes routes. */}
         {/* Settings (Wave 3) — FE-B owns this block. */}
         <Route
           path="/settings"
