@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { VendorBillStatusBadge } from '@/components/procurement/VendorBillStatusBadge';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -76,15 +77,18 @@ export default function VendorBillListPage() {
           <h1 className="text-2xl font-semibold">Vendor bills</h1>
           <p className="text-sm text-fg-muted">Bills you owe to suppliers.</p>
         </div>
-        {canWrite && (
-          <Link
-            to="/vendor-bills/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-vendor-bill-link"
-          >
-            New vendor bill
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="vendor_bills" />
+          {canWrite && (
+            <Link
+              to="/vendor-bills/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-vendor-bill-link"
+            >
+              New vendor bill
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

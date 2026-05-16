@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { ConvertLeadDialog } from '@/components/crm/ConvertLeadDialog';
 import { LeadKanban } from '@/components/crm/LeadKanban';
 import { LeadStatusBadge } from '@/components/crm/LeadStatusBadge';
+import { ExportButton } from '@/components/exports/ExportButton';
 import { cn } from '@/lib/cn';
 import { LeadStatusSchema, type Lead } from '@/lib/types';
 import { formatDate } from '@/lib/formatDate';
@@ -78,6 +79,9 @@ export default function LeadsPage() {
     <div className="flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-border">
         <h1 className="text-xl font-semibold text-fg">Leads</h1>
+        <div className="flex items-center gap-2">
+          <ExportButton entity="leads" />
+        </div>
         <div role="tablist" aria-label="View" className="flex gap-1 p-0.5 rounded bg-bg-subtle">
           <button
             type="button"

@@ -12,6 +12,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { OpportunityKanban } from '@/components/crm/OpportunityKanban';
 import { OpportunityStageBadge } from '@/components/crm/OpportunityStageBadge';
+import { ExportButton } from '@/components/exports/ExportButton';
 import { cn } from '@/lib/cn';
 import { OpportunityStageSchema, type Opportunity } from '@/lib/types';
 import { formatDate } from '@/lib/formatDate';
@@ -68,6 +69,9 @@ export default function OpportunitiesPage() {
     <div className="flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-border">
         <h1 className="text-xl font-semibold text-fg">Opportunities</h1>
+        <div className="flex items-center gap-2">
+          <ExportButton entity="opportunities" />
+        </div>
         <div role="tablist" aria-label="View" className="flex gap-1 p-0.5 rounded bg-bg-subtle">
           <button
             type="button"

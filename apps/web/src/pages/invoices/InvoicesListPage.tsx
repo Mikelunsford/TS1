@@ -13,6 +13,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { InvoiceStatusBadge } from '@/components/invoices/InvoiceStatusBadge';
 import { PaymentStatusBadge } from '@/components/invoices/PaymentStatusBadge';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
@@ -82,15 +83,18 @@ export default function InvoicesListPage() {
             Manage customer invoices across their lifecycle.
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/invoices/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-invoice-link"
-          >
-            New invoice
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="invoices" />
+          {canWrite && (
+            <Link
+              to="/invoices/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-invoice-link"
+            >
+              New invoice
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { ExpenseStatusBadge } from '@/components/expenses/ExpenseStatusBadge';
+import { ExportButton } from '@/components/exports/ExportButton';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -91,15 +92,18 @@ export default function ExpenseListPage({
           <h1 className="text-2xl font-semibold">{title}</h1>
           <p className="text-sm text-fg-muted">{description}</p>
         </div>
-        {canWrite && (
-          <Link
-            to="/expenses/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-expense-link"
-          >
-            New expense
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="expenses" />
+          {canWrite && (
+            <Link
+              to="/expenses/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-expense-link"
+            >
+              New expense
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

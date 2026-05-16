@@ -2,6 +2,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -53,11 +54,14 @@ export default function ContactsListPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-6 py-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Contacts</h1>
-        <p className="text-sm text-fg-muted">
-          Individual people across all customers. Filter by customer or search by name and email.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">Contacts</h1>
+          <p className="text-sm text-fg-muted">
+            Individual people across all customers. Filter by customer or search by name and email.
+          </p>
+        </div>
+        <ExportButton entity="contacts" />
       </header>
 
       <form

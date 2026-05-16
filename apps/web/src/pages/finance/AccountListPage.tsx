@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -84,15 +85,18 @@ export default function AccountListPage() {
             General-ledger accounts. System-seeded accounts are immutable.
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/finance/accounts/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-account-link"
-          >
-            New account
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="chart_of_accounts" />
+          {canWrite && (
+            <Link
+              to="/finance/accounts/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-account-link"
+            >
+              New account
+            </Link>
+          )}
+        </div>
       </header>
 
       <div

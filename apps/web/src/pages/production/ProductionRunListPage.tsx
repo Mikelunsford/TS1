@@ -5,6 +5,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { ProductionRunStatusBadge } from '@/components/ops/ProductionRunStatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -58,15 +59,18 @@ export default function ProductionRunListPage() {
             At most one non-terminal run per project (BE-enforced).
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/production/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-run-link"
-          >
-            New production run
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="production_runs" />
+          {canWrite && (
+            <Link
+              to="/production/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-run-link"
+            >
+              New production run
+            </Link>
+          )}
+        </div>
       </header>
 
       <section className="flex flex-wrap items-end gap-3" aria-label="Filters">

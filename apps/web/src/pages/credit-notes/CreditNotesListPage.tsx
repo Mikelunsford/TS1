@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { CreditNoteStatusBadge } from '@/components/credit-notes/CreditNoteStatusBadge';
+import { ExportButton } from '@/components/exports/ExportButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -89,15 +90,18 @@ export default function CreditNotesListPage() {
             Issue and apply credits against customer invoices.
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/credit-notes/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-credit-note-link"
-          >
-            New credit note
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="credit_notes" />
+          {canWrite && (
+            <Link
+              to="/credit-notes/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-credit-note-link"
+            >
+              New credit note
+            </Link>
+          )}
+        </div>
       </header>
 
       <form

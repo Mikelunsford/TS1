@@ -14,6 +14,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { StockLevelBadge } from '@/components/inventory/StockLevelBadge';
 import { StockMovementsList } from '@/components/inventory/StockMovementsList';
 import { WarehousePicker } from '@/components/inventory/WarehousePicker';
@@ -78,15 +79,18 @@ export default function StockOverviewPage() {
             Stock levels and append-only movement history.
           </p>
         </div>
-        {canAdjust && (
-          <Link
-            to="/stock/adjust"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="adjust-stock-link"
-          >
-            Adjust stock
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="stock_movements" label="Export movements" />
+          {canAdjust && (
+            <Link
+              to="/stock/adjust"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="adjust-stock-link"
+            >
+              Adjust stock
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="flex gap-2 border-b border-border" role="tablist">

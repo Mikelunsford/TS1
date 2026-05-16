@@ -14,6 +14,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { ExportButton } from '@/components/exports/ExportButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
@@ -94,15 +95,18 @@ export default function PaymentsListPage() {
             Record and review customer payments across invoices.
           </p>
         </div>
-        {canWrite && (
-          <Link
-            to="/payments/new"
-            className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
-            data-testid="new-payment-link"
-          >
-            Record payment
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton entity="payments" />
+          {canWrite && (
+            <Link
+              to="/payments/new"
+              className="rounded-md bg-brand px-3 py-1 text-sm font-medium text-brand-fg hover:opacity-90"
+              data-testid="new-payment-link"
+            >
+              Record payment
+            </Link>
+          )}
+        </div>
       </header>
 
       <form
