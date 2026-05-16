@@ -13,8 +13,9 @@
  * admin client and ALWAYS narrow queries with `.eq('org_id', caller.orgId)`
  * for defense-in-depth.
  *
- * The DB column for customer name is `name` (TS-era), but the wire contract
- * exposes it as `display_name`. Mapping happens in `rowToCustomer`.
+ * DB column for customer name is `display_name` (post-Wave-6 / migration
+ * 0054; previously `name` in the TS-era schema). Wire contract has always
+ * used `display_name`; the column rename collapsed the boundary mapping.
  */
 
 import type { Ctx } from '../../_shared/route.ts';
@@ -41,14 +42,14 @@ import {
 // schema; the contract surface still exposes it as nullable so we always
 // return `null` here and wire numbering in a future wave.
 const CUSTOMER_COLS =
-  'id, org_id, name, client_type, client_status, email, phone, ' +
+  'id, org_id, display_name, client_type, client_status, email, phone, ' +
   'tax_id, billing_address, shipping_address, currency_code, is_archived, ' +
   'created_at, updated_at';
 
 interface CustomerRow {
   id: string;
   org_id: string;
-  name: string;
+  display_name: string;
   client_type: string;
   client_status: string;
   email: string | null;
@@ -67,7 +68,7 @@ function rowToCustomer(row: CustomerRow): Customer {
     id: row.id,
     org_id: row.org_id,
     customer_number: null,
-    display_name: row.name,
+    display_name: row.display_name,
     kind: row.client_type === 'individual' ? 'individual' : 'company',
     client_status: row.client_status,
     primary_email: row.email,
@@ -107,7 +108,7 @@ export async function listCustomers({ req, url }: Ctx): Promise<Response> {
     if (!includeArchived) query = query.eq('is_archived', false);
     if (status) query = query.eq('client_status', status);
     if (kind) query = query.eq('client_type', kind);
-    if (q) query = query.ilike('name', `%${q}%`);
+    if (q) query = query.ilike('display_name', `%${q}%`);
     if (cursor) {
       // Keyset: rows strictly older than the cursor pair.
       query = query.or(
@@ -160,7 +161,7 @@ export async function createCustomer({ req }: Ctx): Promise<Response> {
       async () => {
         const insertRow = {
           org_id: caller.orgId,
-          name: body.display_name,
+          display_name: body.display_name,
           client_type: body.kind,
           client_status: 'new',
           email: body.primary_email ?? null,
@@ -211,7 +212,7 @@ export async function patchCustomer({ req, params }: Ctx): Promise<Response> {
         await fetchCustomerRow(caller, id);
 
         const patch: Record<string, unknown> = { updated_by: caller.userId };
-        if (body.display_name !== undefined) patch.name = body.display_name;
+        if (body.display_name !== undefined) patch.display_name = body.display_name;
         if (body.kind !== undefined) patch.client_type = body.kind;
         if (body.primary_email !== undefined) patch.email = body.primary_email;
         if (body.primary_phone !== undefined) patch.phone = body.primary_phone;

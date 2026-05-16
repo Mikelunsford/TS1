@@ -1049,10 +1049,10 @@ export type QuoteLineReorder = z.infer<typeof QuoteLineReorderSchema>;
 
 /**
  * Project row. Reflects the prod `public.projects` shape. Notes:
- *   - DB column is `name` (not `display_name`); SPA renames at the boundary
- *     for parity with the dispatch's preferred verb is optional — current
- *     pattern leaves DB-named columns wire-visible (consistent with
- *     `customers.display_name → customers.name` open carryover F-Wave4-09).
+ *   - DB column is `name` on projects; the wire contract leaves it as `name`
+ *     to match (the `customers.name → customers.display_name` rename in
+ *     Wave 6 / migration 0054 closed the customers carryover; projects.name
+ *     is a separate row-naming concern and intentionally left as-is).
  *   - DB has the full project_state lifecycle stamps already:
  *     bom_finalized_at, ready_to_build_at, sent_to_production_at,
  *     production_started_at, production_completed_at, ready_to_ship_at,
