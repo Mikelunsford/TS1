@@ -167,6 +167,10 @@ export const ALL_CAPABILITIES = [
   // unreachable from a staff session.
   'portal.read',
   // End Phase 21 (Wave 10 Session 4).
+  // Phase 22 (Wave 10 Session 4) — C2 owns this block.
+  'vendor_portal.read',
+  'vendor_portal.write',
+  // End Phase 22 (Wave 10 Session 4).
 ] as const;
 
 export type Capability = (typeof ALL_CAPABILITIES)[number];
@@ -275,6 +279,19 @@ function allow(role: Role, cap: Capability): boolean {
       if (cap.startsWith('views.saved.')) return isRead;
       return isRead && !isWriteFamily;
 
+    // Phase 22 (Wave 10 Session 4) — C2 owns this case.
+    case 'vendor_user':
+      // Vendor portal user. Reads scoped to own vendor_id (RLS enforces row
+      // scope via is_vendor_member()). Only `vendor_portal.*` caps are
+      // granted here; everything else is denied so an accidentally
+      // staff-shaped fetch from a portal session is rejected at the cap
+      // gate before hitting the DB.
+      if (cap === 'vendor_portal.read' || cap === 'vendor_portal.write') return true;
+      if (cap === 'notifications.read') return true;
+      if (cap === 'attachments.read') return true;
+      return false;
+    // End Phase 22 (Wave 10 Session 4).
+
     case 'customer_user':
       // Portal user. Reads scoped to own customer_id (Pattern C RLS does the row scope).
       if (cap === 'notifications.read') return true;
@@ -312,6 +329,9 @@ export const RoleCapabilities: Record<Role, Set<Capability>> = {
   accounting: build('accounting'),
   viewer: build('viewer'),
   customer_user: build('customer_user'),
+  // Phase 22 (Wave 10 Session 4) — C2 owns this entry.
+  vendor_user: build('vendor_user'),
+  // End Phase 22 (Wave 10 Session 4).
 };
 
 export function can(role: Role | null, cap: Capability): boolean {
