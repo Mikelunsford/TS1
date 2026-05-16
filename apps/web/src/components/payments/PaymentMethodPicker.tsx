@@ -7,7 +7,7 @@
  * starts with a sensible choice.
  */
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { listPaymentMethods } from '@/lib/services/paymentMethodsService';
 import type { PaymentMethod } from '@/lib/types';
@@ -35,7 +35,7 @@ export function PaymentMethodPicker({
     staleTime: 60_000,
   });
 
-  const items = query.data?.items ?? [];
+  const items = useMemo(() => query.data?.items ?? [], [query.data]);
 
   // Default-select the is_default row when the caller has no value yet.
   useEffect(() => {
