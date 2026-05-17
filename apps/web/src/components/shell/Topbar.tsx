@@ -43,11 +43,16 @@ export function Topbar() {
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
-  const appName = branding.data?.app_name_override ?? 'Team1';
   const memberships = me.data?.memberships ?? [];
   const activeOrgId = me.data?.active_org_id;
   const activeOrg =
     memberships.find((m) => m.org_id === activeOrgId) ?? memberships[0];
+  // R-W11-BRANDING-01: fall through branding → active org's display_name →
+  // neutral product label. Never default to "Team1" — KitStak (and any
+  // newly-provisioned org) was showing Team1's name in its own topbar
+  // because the only fallback was hardcoded.
+  const appName =
+    branding.data?.app_name_override ?? activeOrg?.display_name ?? 'TS1';
   // Phase 22 (Wave 10 Session 4) — C2 owns this hide-for-vendor flag.
   // Note: vendor_user sessions are redirected to /vendor-portal by
   // ProtectedRoute, so this <Topbar> usually doesn't render for them.
