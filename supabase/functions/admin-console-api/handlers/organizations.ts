@@ -120,7 +120,10 @@ export async function getOrganization({ req, params }: Ctx): Promise<Response> {
       .eq('org_id', id)
       .order('created_at', { ascending: false })
       .limit(500),
-    sb.from('org_feature_flags').select('flag_key, enabled').eq('org_id', id),
+    // Wire shape is { flag_key, enabled } per the SPA + BE Zod schema.
+    // DB column is `is_enabled` (Wave 0 / 0029 + Wave 6 feedback memo).
+    // PostgREST `column:alias` syntax renames in the response.
+    sb.from('org_feature_flags').select('flag_key, enabled:is_enabled').eq('org_id', id),
     sb
       .from('org_domains')
       .select('id, hostname, is_primary, verified_at, ssl_status')
