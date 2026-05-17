@@ -53,10 +53,15 @@ export function listShipments(filters?: ShipmentListFilters) {
   });
 }
 
-export function getShipment(id: string): Promise<Shipment> {
+// R-W8F-OBS-03 — pass `expand: ['project']` to populate `shipment.project` on response.
+export function getShipment(
+  id: string,
+  opts?: { expand?: ReadonlyArray<'project'> },
+): Promise<Shipment> {
+  const qs = opts?.expand?.length ? `?expand=${opts.expand.join(',')}` : '';
   return apiRequest({
     method: 'GET',
-    path: `/ops-api/shipments/${id}`,
+    path: `/ops-api/shipments/${id}${qs}`,
     schema: ShipmentSchema,
   });
 }

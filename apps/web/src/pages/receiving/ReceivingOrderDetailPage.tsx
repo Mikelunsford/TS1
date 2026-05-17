@@ -31,7 +31,7 @@ export default function ReceivingOrderDetailPage() {
 
   const query = useQuery({
     queryKey: receivingOrderKeys.detail(id ?? ''),
-    queryFn: () => getReceivingOrder(id!),
+    queryFn: () => getReceivingOrder(id!, { expand: ['project'] }),
     enabled: Boolean(id),
   });
 
@@ -81,7 +81,16 @@ export default function ReceivingOrderDetailPage() {
       <section className="rounded-md border border-border bg-bg p-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <dt className="text-fg-muted">Project</dt>
-          <dd className="font-mono text-xs">{ro.project_id.slice(0, 8)}…</dd>
+          <dd>
+            {ro.project ? (
+              <span>
+                <span className="font-mono text-xs text-fg-muted">{ro.project.project_number}</span>
+                <span className="ml-2">{ro.project.name}</span>
+              </span>
+            ) : (
+              <span className="font-mono text-xs text-fg-muted">{ro.project_id.slice(0, 8)}…</span>
+            )}
+          </dd>
           <dt className="text-fg-muted">Expected qty</dt>
           <dd className="text-right font-mono">{String(ro.expected_qty)}</dd>
           <dt className="text-fg-muted">Received qty</dt>

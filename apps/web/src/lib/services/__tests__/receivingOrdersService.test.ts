@@ -39,6 +39,12 @@ describe('receivingOrdersService routing', () => {
     expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/receiving-orders/abc');
   });
 
+  // R-W8F-OBS-03 — expand pass-through.
+  it('getReceivingOrder appends ?expand=project when requested', () => {
+    void getReceivingOrder('abc', { expand: ['project'] });
+    expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/receiving-orders/abc?expand=project');
+  });
+
   it('createReceivingOrder POSTs the body', () => {
     void createReceivingOrder({
       project_id: 'p1',

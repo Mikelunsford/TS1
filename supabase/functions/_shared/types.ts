@@ -2151,6 +2151,32 @@ export const WarehousePatchSchema = z.object({
 export type WarehousePatch = z.infer<typeof WarehousePatchSchema>;
 
 // ============================================================================
+// R-W8F-OBS-02/03 — Optional expand-embed mini schemas
+// ============================================================================
+//
+// Compact projections of items + projects used as the embedded shape when
+// callers pass ?expand=item or ?expand=project on the ops-api / inventory-api
+// detail GETs. Keep these minimal — they exist to let detail pages render a
+// human-readable label without a second client-side fetch, not to mirror the
+// full row. Adding fields here is a wire-shape change; review on both sides.
+
+export const ItemMiniSchema = z.object({
+  id: UuidSchema,
+  item_code: z.string(),
+  description: z.string(),
+  item_kind: ItemKindSchema,
+});
+export type ItemMini = z.infer<typeof ItemMiniSchema>;
+
+export const ProjectMiniSchema = z.object({
+  id: UuidSchema,
+  project_number: z.string(),
+  name: z.string(),
+  status: ProjectStateSchema,
+});
+export type ProjectMini = z.infer<typeof ProjectMiniSchema>;
+
+// ============================================================================
 // Wave 8d / Phase 13 — Inventory: Stock Levels
 // ============================================================================
 //
@@ -2170,6 +2196,8 @@ export const StockLevelSchema = z.object({
   last_counted_at: TimestampSchema.nullable(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
+  // R-W8F-OBS-02 — populated when caller passes ?expand=item.
+  item: ItemMiniSchema.nullable().optional(),
 });
 export type StockLevel = z.infer<typeof StockLevelSchema>;
 
@@ -2275,6 +2303,8 @@ export const ReceivingOrderSchema = z.object({
   cancelled_at: TimestampSchema.nullable(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
+  // R-W8F-OBS-03 — populated when caller passes ?expand=project.
+  project: ProjectMiniSchema.nullable().optional(),
 });
 export type ReceivingOrder = z.infer<typeof ReceivingOrderSchema>;
 
@@ -2341,6 +2371,8 @@ export const ProductionRunSchema = z.object({
   notes: z.string().nullable(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
+  // R-W8F-OBS-03 — populated when caller passes ?expand=project.
+  project: ProjectMiniSchema.nullable().optional(),
 });
 export type ProductionRun = z.infer<typeof ProductionRunSchema>;
 
@@ -2390,6 +2422,8 @@ export const ShipmentSchema = z.object({
   notes: z.string().nullable(),
   created_at: TimestampSchema,
   updated_at: TimestampSchema,
+  // R-W8F-OBS-03 — populated when caller passes ?expand=project.
+  project: ProjectMiniSchema.nullable().optional(),
 });
 export type Shipment = z.infer<typeof ShipmentSchema>;
 

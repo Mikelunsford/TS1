@@ -31,13 +31,16 @@ import {
   ProductionRunPatchSchema,
   ProductionRunSchema,
   type ProductionRun,
+  type ProjectMini,
 } from '../../_shared/types.ts';
 import { assertTransition, WorkflowError } from '../../_shared/workflow.ts';
 import {
   admin,
   decodeCursor,
+  fetchProjectMiniMap,
   paginate,
   parseBody,
+  parseExpand,
   parseLimit,
   requireCap,
   respondWithIdempotency,
@@ -66,8 +69,8 @@ interface PrRow {
   updated_at: string;
 }
 
-function rowToPr(row: PrRow): ProductionRun {
-  return ProductionRunSchema.parse(row);
+function rowToPr(row: PrRow, project?: ProjectMini | null): ProductionRun {
+  return ProductionRunSchema.parse({ ...row, project: project ?? undefined });
 }
 
 // =========================================================== GET /production-runs
@@ -102,7 +105,21 @@ export async function listProductionRuns({ req, url }: Ctx): Promise<Response> {
   }
   const rows = (data ?? []) as PrRow[];
   const { items, next_cursor } = paginate(rows, limit);
-  return ok({ items: items.map(rowToPr), next_cursor }, undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when ?expand=project.
+  const expand = parseExpand(url);
+  const projectMap = expand.has('project')
+    ? await fetchProjectMiniMap(caller, [...new Set(items.map((r) => r.project_id))])
+    : null;
+
+  return ok(
+    {
+      items: items.map((r) => rowToPr(r, projectMap?.get(r.project_id) ?? null)),
+      next_cursor,
+    },
+    undefined,
+    { req },
+  );
 }
 
 // ========================================================== POST /production-runs
@@ -162,11 +179,18 @@ export async function createProductionRun({ req }: Ctx): Promise<Response> {
 }
 
 // ====================================================== GET /production-runs/:id
-export async function getProductionRun({ req, params }: Ctx): Promise<Response> {
+export async function getProductionRun({ req, url, params }: Ctx): Promise<Response> {
   const caller = requireCaller(req);
   requireCap(caller, 'production.read');
   const row = await fetchPrRow(caller, params.id);
-  return ok(rowToPr(row), undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when ?expand=project.
+  const expand = parseExpand(url);
+  const project = expand.has('project')
+    ? (await fetchProjectMiniMap(caller, [row.project_id])).get(row.project_id) ?? null
+    : undefined;
+
+  return ok(rowToPr(row, project), undefined, { req });
 }
 
 // ==================================================== PATCH /production-runs/:id

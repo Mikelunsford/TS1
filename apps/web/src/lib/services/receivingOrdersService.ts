@@ -58,10 +58,16 @@ export function listReceivingOrders(filters?: ReceivingOrderListFilters) {
   });
 }
 
-export function getReceivingOrder(id: string): Promise<ReceivingOrder> {
+// R-W8F-OBS-03 — pass `expand: ['project']` to populate `ro.project` with a
+// ProjectMini (id + project_number + name + status) on the response.
+export function getReceivingOrder(
+  id: string,
+  opts?: { expand?: ReadonlyArray<'project'> },
+): Promise<ReceivingOrder> {
+  const qs = opts?.expand?.length ? `?expand=${opts.expand.join(',')}` : '';
   return apiRequest({
     method: 'GET',
-    path: `/ops-api/receiving-orders/${id}`,
+    path: `/ops-api/receiving-orders/${id}${qs}`,
     schema: ReceivingOrderSchema,
   });
 }

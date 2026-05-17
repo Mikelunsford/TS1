@@ -39,6 +39,12 @@ describe('productionRunsService routing', () => {
     expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/production-runs/abc');
   });
 
+  // R-W8F-OBS-03 — expand pass-through.
+  it('getProductionRun appends ?expand=project when requested', () => {
+    void getProductionRun('abc', { expand: ['project'] });
+    expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/production-runs/abc?expand=project');
+  });
+
   it('createProductionRun POSTs the body', () => {
     void createProductionRun({ project_id: 'p1', qty_target: 100 });
     const call = mock.mock.calls[0]?.[0];

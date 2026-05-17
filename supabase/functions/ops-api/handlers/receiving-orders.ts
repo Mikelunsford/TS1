@@ -29,14 +29,17 @@ import {
   ReceivingOrderPatchSchema,
   ReceivingOrderReceiveSchema,
   ReceivingOrderSchema,
+  type ProjectMini,
   type ReceivingOrder,
 } from '../../_shared/types.ts';
 import { assertTransition, WorkflowError } from '../../_shared/workflow.ts';
 import {
   admin,
   decodeCursor,
+  fetchProjectMiniMap,
   paginate,
   parseBody,
+  parseExpand,
   parseLimit,
   requireCap,
   respondWithIdempotency,
@@ -70,8 +73,8 @@ interface RoRow {
   updated_at: string;
 }
 
-function rowToRo(row: RoRow): ReceivingOrder {
-  return ReceivingOrderSchema.parse(row);
+function rowToRo(row: RoRow, project?: ProjectMini | null): ReceivingOrder {
+  return ReceivingOrderSchema.parse({ ...row, project: project ?? undefined });
 }
 
 // ========================================================== GET /receiving-orders
@@ -110,7 +113,21 @@ export async function listReceivingOrders({ req, url }: Ctx): Promise<Response> 
   }
   const rows = (data ?? []) as RoRow[];
   const { items, next_cursor } = paginate(rows, limit);
-  return ok({ items: items.map(rowToRo), next_cursor }, undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when requested. Batch over the visible page only.
+  const expand = parseExpand(url);
+  const projectMap = expand.has('project')
+    ? await fetchProjectMiniMap(caller, [...new Set(items.map((r) => r.project_id))])
+    : null;
+
+  return ok(
+    {
+      items: items.map((r) => rowToRo(r, projectMap?.get(r.project_id) ?? null)),
+      next_cursor,
+    },
+    undefined,
+    { req },
+  );
 }
 
 // ========================================================= POST /receiving-orders
@@ -176,11 +193,18 @@ export async function createReceivingOrder({ req }: Ctx): Promise<Response> {
 }
 
 // ===================================================== GET /receiving-orders/:id
-export async function getReceivingOrder({ req, params }: Ctx): Promise<Response> {
+export async function getReceivingOrder({ req, url, params }: Ctx): Promise<Response> {
   const caller = requireCaller(req);
   requireCap(caller, 'receiving.read');
   const row = await fetchRoRow(caller, params.id);
-  return ok(rowToRo(row), undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when ?expand=project.
+  const expand = parseExpand(url);
+  const project = expand.has('project')
+    ? (await fetchProjectMiniMap(caller, [row.project_id])).get(row.project_id) ?? null
+    : undefined;
+
+  return ok(rowToRo(row, project), undefined, { req });
 }
 
 // =================================================== PATCH /receiving-orders/:id

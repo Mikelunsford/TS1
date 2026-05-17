@@ -46,10 +46,14 @@ export default function StockOverviewPage() {
     setParams(sp, { replace: true });
   }
 
+  // R-W8F-OBS-02 — `expand: ['item']` makes BE embed an ItemMini on each
+  // level row, so we can render full description regardless of the cached
+  // 200-item lookup page below.
   const levelFilters: StockLevelListFilters = {
     ...(warehouseId && { warehouse_id: warehouseId }),
     ...(itemId && { item_id: itemId }),
     ...(lowStock && { low_stock: true }),
+    expand: ['item'],
   };
 
   const levelsQuery = useQuery({
@@ -187,9 +191,11 @@ export default function StockOverviewPage() {
                   {levelsQuery.data.items.map((row) => (
                     <tr key={row.id} className="hover:bg-bg-muted">
                       <td className="px-3 py-2">
-                        {itemNameById.get(row.item_id) ?? (
-                          <span className="font-mono text-xs text-fg-muted">{row.item_id.slice(0, 8)}…</span>
-                        )}
+                        {row.item?.description
+                          ?? itemNameById.get(row.item_id)
+                          ?? (
+                            <span className="font-mono text-xs text-fg-muted">{row.item_id.slice(0, 8)}…</span>
+                          )}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{row.warehouse_id.slice(0, 8)}…</td>
                       <td className="px-3 py-2 text-right font-mono">{String(row.quantity_on_hand)}</td>
