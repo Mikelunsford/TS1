@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, LogOut, RefreshCw, ShieldAlert, UserCircle2 } from 'lucide-react';
+import { ChevronDown, LogOut, Menu, RefreshCw, ShieldAlert, UserCircle2 } from 'lucide-react';
 
 import { useAuth } from '@/auth/AuthContext';
 import { useBranding } from '@/lib/hooks/useBranding';
@@ -31,7 +31,13 @@ import { useIsPlatformAdmin } from '@/lib/hooks/useIsPlatformAdmin';
  * placement and TS1/07-architecture/00-SYSTEM-ARCHITECTURE.md §2.2 for the
  * switch-org flow.
  */
-export function Topbar() {
+export interface TopbarProps {
+  /** Called when the mobile hamburger is tapped (< md breakpoint).
+   *  AppShell uses this to open the Sidebar drawer. Omitted on desktop. */
+  onMenuClick?: () => void;
+}
+
+export function Topbar({ onMenuClick }: TopbarProps = {}) {
   const { state, signOut } = useAuth();
   const me = useMe({ enabled: state.status === 'authenticated' });
   const branding = useBranding({ enabled: state.status === 'authenticated' });
@@ -62,20 +68,35 @@ export function Topbar() {
   // End Phase 22 (Wave 10 Session 4).
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-bg px-4">
+    <header className="flex h-14 items-center justify-between gap-2 border-b border-border bg-bg px-4">
       <div className="flex items-center gap-2 font-semibold">
+        {/* UI-AUDIT PR A: hamburger appears below `md:` to open the
+            Sidebar drawer. AppShell wires `onMenuClick`; if unset (e.g.
+            an isolated render) the button is hidden so nothing breaks. */}
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="rounded-md p-1 text-fg-muted hover:bg-bg-subtle hover:text-fg md:hidden"
+            aria-label="Open navigation"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
         <span
           className="inline-block h-6 w-6 rounded"
           style={{ backgroundColor: 'rgb(var(--brand))' }}
           aria-hidden
         />
-        <span>{appName}</span>
+        <span className="truncate">{appName}</span>
       </div>
 
       {/* Phase 17 GlobalSearchBar (Wave 10 Session 2) — B2 owns this block. */}
       {/* Phase 22 (Wave 10 Session 4) — C2 hides search for vendor_user. */}
+      {/* UI-AUDIT PR A: shrink gracefully when topbar is tight on mobile
+          (flex-1 + min-w-0 so flexbox lets the search bar collapse). */}
       {!isVendorUser && (
-        <div className="mx-4 flex-1 max-w-md">
+        <div className="mx-2 flex-1 min-w-0 max-w-md md:mx-4">
           <GlobalSearchBar />
         </div>
       )}
