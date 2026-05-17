@@ -313,6 +313,38 @@ export async function createJournalEntry({ req }: Ctx): Promise<Response> {
           );
         }
 
+        // R-W11-PERIOD-01: advisory closed-period pre-check. The migration-0074
+        // trigger is the authority; this is purely a UX nice-to-have that
+        // returns the 422 envelope ~1 roundtrip earlier so the form's error
+        // toast fires before the JE-lines insert path executes. If this
+        // pre-check misses a closed period (RLS / replication lag / race),
+        // the trigger still fires and we return the same envelope via the
+        // existing `isPeriodClosedError` catch below — no behavior gap.
+        const candidateDate =
+          body.entry_date ?? new Date().toISOString().slice(0, 10);
+        const { data: closedPeriods, error: pcErr } = await admin()
+          .from('period_close')
+          .select('id')
+          .eq('org_id', caller.orgId)
+          .eq('status', 'closed')
+          .is('deleted_at', null)
+          .lte('period_start', candidateDate)
+          .gte('period_end', candidateDate)
+          .limit(1);
+        if (pcErr) {
+          throw new ApiError('INTERNAL_ERROR', 'period_close lookup failed', 500, {
+            detail: pcErr.message,
+          });
+        }
+        if (closedPeriods && closedPeriods.length > 0) {
+          throw new ApiError(
+            'PERIOD_CLOSED',
+            'Cannot post a journal entry into a closed accounting period.',
+            422,
+            { entry_date: candidateDate },
+          );
+        }
+
         const entryNumber = await nextJournalEntryNumber(caller.orgId);
 
         const insertRow = {
