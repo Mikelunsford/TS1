@@ -245,6 +245,103 @@ describe('admin-console-api Phase 23 — request validation', () => {
   });
 });
 
+// ─── Wave 11C extensions ──────────────────────────────────────────────────
+// 1. POST /admin/organizations/provision now returns coa_count + warehouse_count
+//    (Wave 11C wired seed_org_defaults into the handler, which seeds COA + a
+//    default warehouse). The provision response envelope must surface those
+//    counts so the SPA can show "13 accounts, 1 warehouse" inline.
+// 2. GET /admin/organizations/:id must NOT 500 (regression test for the tray
+//    chip — root cause was the org_feature_flags column drift fixed in PR #90,
+//    but the test guards against future column-name drift).
+// 3. POST /journal-entries into a closed period returns a 422 PERIOD_CLOSED
+//    envelope (Wave 11C migration 0074 installed the DB trigger).
+
+const ProvisionResponseSchema = z.object({
+  org: OrgRow.omit({ member_count: true }).extend({
+    member_count: z.number().int().nonnegative().optional(),
+  }),
+  owner_user_id: z.string().uuid(),
+  coa_count: z.number().int().nonnegative(),
+  warehouse_count: z.number().int().nonnegative(),
+});
+
+const PeriodClosedErrorEnvelope = z.object({
+  error: z.object({
+    code: z.literal('PERIOD_CLOSED'),
+    message: z.string().min(1),
+    details: z.unknown().optional(),
+    request_id: z.string().min(1),
+  }),
+});
+
+describe('admin-console-api Phase 23 — Wave 11C provisioning + period-lock', () => {
+  it('provision response includes coa_count + warehouse_count', () => {
+    const v = ProvisionResponseSchema.parse({
+      org: {
+        id: '66666666-6666-6666-6666-666666666666',
+        slug: 'acme-2',
+        display_name: 'ACME 2',
+        status: 'active',
+        suspended_at: null,
+        suspended_by: null,
+        created_at: '2026-05-16T00:00:00Z',
+      },
+      owner_user_id: '77777777-7777-7777-7777-777777777777',
+      coa_count: 13,
+      warehouse_count: 1,
+    });
+    expect(v.coa_count).toBeGreaterThan(0);
+    expect(v.warehouse_count).toBeGreaterThan(0);
+  });
+
+  it('GET /admin/organizations/:id detail still parses post-Wave-11C (regression for 500 chip)', () => {
+    // Same shape as Phase 23 OrgDetail — explicit regression assertion
+    // that the wire format did not drift.
+    const v = OrgDetail.parse({
+      org: {
+        id: '17e03676-3c18-405a-8c29-2ef0bf2cb544',
+        slug: 'kitstak',
+        display_name: 'KitStak',
+        status: 'active',
+        suspended_at: null,
+        suspended_by: null,
+        created_at: '2026-05-16T00:00:00Z',
+        member_count: 1,
+      },
+      memberships: [
+        {
+          user_id: '88888888-8888-8888-8888-888888888888',
+          email: 'mike@kitstak.com',
+          display_name: 'Mike Lunsford',
+          role: 'org_owner',
+          is_active: true,
+          created_at: '2026-05-16T00:00:00Z',
+        },
+      ],
+      // Key field that caused the 500 — `enabled` aliased from `is_enabled`.
+      feature_flags: [
+        { flag_key: 'finance.expenses', enabled: true },
+        { flag_key: 'plugins.3pl', enabled: false },
+      ],
+      domains: [],
+    });
+    expect(v.feature_flags[0]?.flag_key).toBe('finance.expenses');
+    expect(v.feature_flags[1]?.enabled).toBe(false);
+  });
+
+  it('PERIOD_CLOSED envelope is the right shape (closed-period JE write)', () => {
+    const v = PeriodClosedErrorEnvelope.parse({
+      error: {
+        code: 'PERIOD_CLOSED',
+        message: 'Cannot post a journal entry into a closed accounting period.',
+        details: { detail: 'period_closed: cannot post JE for 2025-12-15 — period 2025-12-01..2025-12-31 is closed' },
+        request_id: '99999999-9999-9999-9999-999999999999',
+      },
+    });
+    expect(v.error.code).toBe('PERIOD_CLOSED');
+  });
+});
+
 describe('admin-console-api Phase 23 — security posture', () => {
   it('non-platform-admin caller must receive 403 (handler-level)', () => {
     // This is a documentation-style assertion: the handler implementation

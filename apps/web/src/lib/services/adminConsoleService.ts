@@ -98,6 +98,12 @@ const ProvisionResponseSchema = z.object({
     member_count: z.number().int().optional(),
   }),
   owner_user_id: z.string().uuid(),
+  // Wave 11C: provisioning now seeds COA + default warehouse via
+  // seed_org_defaults RPC. The handler returns the resulting counts so
+  // the SPA can show "13 accounts, 1 warehouse" inline. Counts default to 0
+  // when seeding partially failed (handler logs to audit but does not throw).
+  coa_count: z.number().int().nonnegative().default(0),
+  warehouse_count: z.number().int().nonnegative().default(0),
 });
 
 const SuspendResponseSchema = z.object({
