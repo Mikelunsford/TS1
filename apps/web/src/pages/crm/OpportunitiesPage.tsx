@@ -8,7 +8,7 @@
 import { useMemo } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { OpportunityKanban } from '@/components/crm/OpportunityKanban';
 import { OpportunityStageBadge } from '@/components/crm/OpportunityStageBadge';
@@ -161,7 +161,14 @@ function OpportunitiesTable({ opportunities }: { opportunities: Opportunity[] })
           opportunities.map((opp) => (
             <tr key={opp.id} className="border-b border-border hover:bg-bg-subtle">
               <td className="px-4 py-2 font-mono text-xs text-fg-muted">{opp.opportunity_number}</td>
-              <td className="px-4 py-2 font-medium text-fg">{opp.display_name}</td>
+              <td className="px-4 py-2 font-medium text-fg">
+                <Link
+                  to={`/crm/opportunities/${opp.id}`}
+                  className="text-brand hover:underline"
+                >
+                  {opp.display_name}
+                </Link>
+              </td>
               <td className="px-4 py-2">
                 <OpportunityStageBadge stage={opp.stage} />
               </td>

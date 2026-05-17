@@ -21,6 +21,13 @@ const CrmIndexRedirect = lazy(() => import('./pages/crm/CrmIndexRedirect'));
 const CustomersListPage = lazy(() => import('./pages/crm/CustomersListPage'));
 const CustomerDetailPage = lazy(() => import('./pages/crm/CustomerDetailPage'));
 const ContactsListPage = lazy(() => import('./pages/crm/ContactsListPage'));
+// CRM detail pages (R-W10-S2-B1-OBS-02) — closes the 3-entity gap so the
+// Wave-10 Phase-16 CollaborationSection can wire into contacts / leads /
+// opportunities just like every other detail surface.
+const ContactDetailPage = lazy(() => import('./pages/crm/ContactDetailPage'));
+const LeadDetailPage = lazy(() => import('./pages/crm/LeadDetailPage'));
+const OpportunityDetailPage = lazy(() => import('./pages/crm/OpportunityDetailPage'));
+// End CRM detail pages (R-W10-S2-B1-OBS-02).
 const ActivitiesFeedPage = lazy(() => import('./pages/crm/ActivitiesFeedPage'));
 const LeadsPage = lazy(() => import('./pages/crm/LeadsPage'));
 const OpportunitiesPage = lazy(() => import('./pages/crm/OpportunitiesPage'));
@@ -233,11 +240,28 @@ export function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        {/* CRM detail routes (R-W10-S2-B1-OBS-02). */}
+        <Route
+          path="/crm/contacts/:id"
+          element={
+            <ProtectedRoute>
+              <ContactDetailPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/crm/leads"
           element={
             <ProtectedRoute>
               <LeadsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/crm/leads/:id"
+          element={
+            <ProtectedRoute>
+              <LeadDetailPage />
             </ProtectedRoute>
           }
         />
@@ -249,6 +273,15 @@ export function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/crm/opportunities/:id"
+          element={
+            <ProtectedRoute>
+              <OpportunityDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* End CRM detail routes (R-W10-S2-B1-OBS-02). */}
         <Route
           path="/crm/activities"
           element={
