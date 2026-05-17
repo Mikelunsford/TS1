@@ -210,26 +210,15 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
     async () => {
       const sb = admin();
 
-      // 1. Create org row.
-      const { data: org, error: orgErr } = await sb
-        .from('organizations')
-        .insert({ slug: body.slug, display_name: body.name })
-        .select('id, slug, display_name, status, created_at, suspended_at, suspended_by')
-        .single();
-      if (orgErr) {
-        if (orgErr.message?.includes('unique')) {
-          throw new ApiError('STATE_CONFLICT', 'slug already in use', 409, {
-            slug: body.slug,
-          });
-        }
-        throw new ApiError('INTERNAL_ERROR', 'organization insert failed', 500, {
-          detail: orgErr.message,
-        });
-      }
+      // ── A. Resolve / create owner user (auth.users + profile + role) ──
+      //
+      // These four steps stay on the handler side because they touch the
+      // auth schema (Supabase admin SDK) and the profiles + roles tables in
+      // a way that can't share a SQL transaction with the org INSERT. The
+      // RPC below (B) wraps the org-side work in a single SQL txn so any
+      // SQL-side failure rolls back atomically.
 
-      // 2. Resolve / create owner user via Supabase auth admin API.
-      // Try existing user first by listing — if not present, create one via
-      // invite-by-email so the user can complete signup.
+      // A.1 — Find or invite the owner.
       const { data: listed } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
       let ownerUserId: string | null = null;
       for (const u of listed?.users ?? []) {
@@ -251,7 +240,7 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
         ownerUserId = invite.user.id;
       }
 
-      // 3. Upsert profile row.
+      // A.2 — Upsert profile.
       await sb
         .from('profiles')
         .upsert(
@@ -259,7 +248,7 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
           { onConflict: 'user_id' },
         );
 
-      // 4. Look up org_owner role id.
+      // A.3 — Look up org_owner role id.
       const { data: ownerRole, error: ownerRoleErr } = await sb
         .from('roles')
         .select('id')
@@ -269,79 +258,48 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
         throw new ApiError('INTERNAL_ERROR', 'org_owner role not seeded', 500);
       }
 
-      // 5. Insert org_membership.
-      const { error: memErr } = await sb
-        .from('org_memberships')
-        .insert({
-          org_id: org.id,
-          user_id: ownerUserId,
-          role_id: ownerRole.id,
-          is_active: true,
-        });
-      if (memErr) {
-        // Best-effort compensating delete on the org row. PostgREST doesn't
-        // give us a real txn so we DELETE the freshly-created org to avoid
-        // orphans. RLS-clean because admin() is service-role.
-        await sb.from('organizations').delete().eq('id', org.id);
-        throw new ApiError('INTERNAL_ERROR', 'membership insert failed', 500, {
-          detail: memErr.message,
-        });
-      }
+      // ── B. Single-transaction RPC for the org-side work (R-W11-PROVISION-02) ──
+      //
+      // INSERT organization + INSERT org_memberships + seed_org_defaults +
+      // feature-flag upserts + count hydration all live inside one PL/pgSQL
+      // function so a fault at any step rolls back the entire org. Replaces
+      // the Wave 11C try/catch + compensating DELETE chain.
+      const flagEntries = Object.entries(DEFAULT_FEATURE_FLAGS);
+      const flagKeys = flagEntries.map(([k]) => k);
+      const flagEnabled = flagEntries.map(([, v]) => v);
 
-      // 6. Seed per-org defaults (Wave 11C R-W11-PROVISION-01).
-      //    seed_org_defaults is idempotent per migration 0074 — re-runs
-      //    safe via per-org NOT EXISTS guards.
-      const { error: seedErr } = await sb.rpc('seed_org_defaults', {
-        p_org_id: org.id,
+      const { data: rpcData, error: rpcErr } = await sb.rpc('provision_organization', {
+        p_slug: body.slug,
+        p_display_name: body.name,
+        p_owner_user_id: ownerUserId,
+        p_owner_role_id: ownerRole.id,
+        p_feature_flag_keys: flagKeys,
+        p_feature_flag_enabled: flagEnabled,
+        p_actor_user_id: caller.userId,
       });
-      if (seedErr) {
-        // Compensating rollback: delete membership + org. Best-effort —
-        // PostgREST has no cross-statement txn.
-        await sb.from('org_memberships').delete().eq('org_id', org.id);
-        await sb.from('organizations').delete().eq('id', org.id);
-        throw new ApiError('INTERNAL_ERROR', 'org defaults seed failed', 500, {
-          detail: seedErr.message,
+      if (rpcErr) {
+        // 23505 unique_violation → slug collision (the only constraint with
+        // a user-actionable cause; everything else is a server bug).
+        if (rpcErr.code === '23505' || rpcErr.message?.includes('organizations_slug_key')) {
+          throw new ApiError('STATE_CONFLICT', 'slug already in use', 409, {
+            slug: body.slug,
+          });
+        }
+        throw new ApiError('INTERNAL_ERROR', 'provision_organization rpc failed', 500, {
+          detail: rpcErr.message,
         });
       }
 
-      // 7. Seed default feature flags. Use upsert so re-running on partial
-      //    failure is harmless.
-      const flagRows = Object.entries(DEFAULT_FEATURE_FLAGS).map(([flag_key, is_enabled]) => ({
-        org_id: org.id,
-        flag_key,
-        is_enabled,
-        config: {},
-        created_by: caller.userId,
-        updated_by: caller.userId,
-      }));
-      const { error: flagErr } = await sb
-        .from('org_feature_flags')
-        .upsert(flagRows, { onConflict: 'org_id,flag_key' });
-      if (flagErr) {
-        // Non-fatal: log via audit but don't roll back the whole org. An
-        // org without flags is recoverable (admin can re-run via console).
-        await writeAudit({
-          actor_user_id: caller.userId,
-          org_id: org.id,
-          entity_type: 'organization',
-          entity_id: org.id,
-          action: 'platform_admin.provision.feature_flags_warn',
-          after: { error: flagErr.message },
-          notes: 'feature flag seed partially failed; org left in default-false state',
-        });
-      }
+      const result = rpcData as {
+        org: OrgRow & { member_count?: number };
+        coa_count: number;
+        warehouse_count: number;
+      };
+      const org = result.org;
+      const coaCount = result.coa_count;
+      const warehouseCount = result.warehouse_count;
 
-      // 8. Hydrate seeded counts so the SPA can show "13 accounts, 1 warehouse".
-      const [{ count: coaCount }, { count: warehouseCount }] = await Promise.all([
-        sb
-          .from('chart_of_accounts')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', org.id),
-        sb
-          .from('warehouses')
-          .select('id', { count: 'exact', head: true })
-          .eq('org_id', org.id),
-      ]);
+      // ── C. Audit + envelope ──
 
       await writeAudit({
         actor_user_id: caller.userId,
@@ -353,8 +311,8 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
           slug: org.slug,
           display_name: org.display_name,
           owner_email: body.owner_email,
-          coa_count: coaCount ?? 0,
-          warehouse_count: warehouseCount ?? 0,
+          coa_count: coaCount,
+          warehouse_count: warehouseCount,
         },
         notes: `platform admin ${caller.userId} provisioned new org`,
       });
@@ -365,8 +323,8 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
           data: {
             org,
             owner_user_id: ownerUserId,
-            coa_count: coaCount ?? 0,
-            warehouse_count: warehouseCount ?? 0,
+            coa_count: coaCount,
+            warehouse_count: warehouseCount,
           },
         },
       };
