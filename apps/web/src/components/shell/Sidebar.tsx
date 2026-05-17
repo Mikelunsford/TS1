@@ -1,10 +1,13 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
   BookOpen,
   Boxes,
   Briefcase,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Contact,
   CreditCard,
@@ -33,6 +36,11 @@ import { useCapabilities } from '@/lib/hooks/useCapabilities';
  *
  * Modules per /03-workspace/04-GLOSSARY.md and /11-modules/00-MODULE-CATALOG.md.
  * Wave 2 lights up the CRM module with five sub-routes.
+ *
+ * Category groups (those with `children`) collapse/expand on click. The
+ * currently-active route auto-opens its parent category on mount and on
+ * route change. Open state persists in localStorage so reloads remember
+ * the user's preference.
  */
 
 interface NavItem {
@@ -176,8 +184,84 @@ const items: NavItem[] = [
   // /Phase15-FE block.
 ];
 
+const STORAGE_KEY = 'ts1.sidebar.openCategories.v1';
+
+function readPersistedOpen(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function writePersistedOpen(open: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...open]));
+  } catch {
+    // localStorage may be unavailable (private mode / quota); fail silent.
+  }
+}
+
+/**
+ * Return the parent `to` of the category whose own `to` or any child `to`
+ * matches the current pathname. Null when no category contains the current
+ * route (top-level routes like `/quotes`).
+ */
+function findActiveParent(pathname: string): string | null {
+  for (const item of items) {
+    if (!item.children) continue;
+    if (pathname === item.to || pathname.startsWith(`${item.to}/`)) return item.to;
+    for (const child of item.children) {
+      if (pathname === child.to || pathname.startsWith(`${child.to}/`)) return item.to;
+    }
+  }
+  return null;
+}
+
 export function Sidebar() {
   const { can } = useCapabilities();
+  const { pathname } = useLocation();
+  const activeParent = useMemo(() => findActiveParent(pathname), [pathname]);
+
+  const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
+    const persisted = readPersistedOpen();
+    const initial =
+      typeof window !== 'undefined' ? findActiveParent(window.location.pathname) : null;
+    if (initial) persisted.add(initial);
+    return persisted;
+  });
+
+  // Auto-open the active parent on route change without collapsing others.
+  useEffect(() => {
+    if (!activeParent) return;
+    setOpenCategories((prev) => {
+      if (prev.has(activeParent)) return prev;
+      const next = new Set(prev);
+      next.add(activeParent);
+      writePersistedOpen(next);
+      return next;
+    });
+  }, [activeParent]);
+
+  const toggleCategory = (key: string) => {
+    setOpenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      writePersistedOpen(next);
+      return next;
+    });
+  };
+
   return (
     <nav
       className="flex w-56 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4"
@@ -201,26 +285,51 @@ export function Sidebar() {
             </span>
           );
         }
+        const hasChildren = !!item.children?.length;
+        const isOpen = hasChildren && openCategories.has(item.to);
+        const isActiveCategory = activeParent === item.to;
         return (
           <div key={item.to} className="flex flex-col gap-0.5">
-            <NavLink
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm',
-                  isActive
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => toggleCategory(item.to)}
+                aria-expanded={isOpen}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm',
+                  isActiveCategory
                     ? 'bg-bg text-fg ring-1 ring-border-strong'
                     : 'text-fg-muted hover:bg-bg hover:text-fg',
-                )
-              }
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-            {item.children && (
+                )}
+              >
+                {isOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <Icon className="h-4 w-4" />
+                <span className="flex-1">{item.label}</span>
+              </button>
+            ) : (
+              <NavLink
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm',
+                    isActive
+                      ? 'bg-bg text-fg ring-1 ring-border-strong'
+                      : 'text-fg-muted hover:bg-bg hover:text-fg',
+                  )
+                }
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </NavLink>
+            )}
+            {hasChildren && isOpen && (
               <div className="ml-6 flex flex-col gap-0.5 border-l border-border pl-2">
-                {item.children.map((child) => {
+                {item.children!.map((child) => {
                   const ChildIcon = child.icon;
                   return (
                     <NavLink
