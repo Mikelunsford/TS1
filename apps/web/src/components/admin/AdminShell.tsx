@@ -10,9 +10,9 @@
  * platform_admins, so this is purely a UX guard.
  */
 
-import type { ReactNode } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
-import { Building2, Clock, Plus, ShieldAlert } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Building2, CheckCircle2, Clock, Plus, ShieldAlert } from 'lucide-react';
 
 import { useIsPlatformAdmin } from '@/lib/hooks/useIsPlatformAdmin';
 import { useImpersonation } from './useImpersonation';
@@ -29,6 +29,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { data, isLoading } = useIsPlatformAdmin();
   const impersonation = useImpersonation();
+  // Wave 11: one-time MFA-verified banner. Reads the ?mfa=verified flag the
+  // enrollment page sets and auto-dismisses after 8 seconds.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mfaJustVerified = searchParams.get('mfa') === 'verified';
+  const [showMfaBanner, setShowMfaBanner] = useState(mfaJustVerified);
+  useEffect(() => {
+    if (!mfaJustVerified) return;
+    const id = window.setTimeout(() => {
+      setShowMfaBanner(false);
+      const next = new URLSearchParams(searchParams);
+      next.delete('mfa');
+      setSearchParams(next, { replace: true });
+    }, 8000);
+    return () => window.clearTimeout(id);
+  }, [mfaJustVerified, searchParams, setSearchParams]);
 
   if (isLoading) {
     return (
@@ -40,11 +55,32 @@ export function AdminShell({ children }: { children: ReactNode }) {
   if (!data?.isPlatformAdmin) {
     return <Navigate to="/" replace />;
   }
+  // ─── Wave 11 MFA gate — Sub-agent A owns this block. ───
+  // Closes R-W10-P23-OBS-02. A platform admin without a verified TOTP factor
+  // gets bounced to the enrollment page on any /admin/* route (except the
+  // enrollment page itself, to avoid a loop). Server still enforces MFA on
+  // every handler — this redirect is purely UX so admins don't hit
+  // MFA_REQUIRED errors as their first sign-in experience.
+  const mfaVerified = data.me?.mfa_verified === true;
+  if (!mfaVerified && location.pathname !== '/admin/enroll-mfa') {
+    return <Navigate to="/admin/enroll-mfa" replace />;
+  }
+  // ─── End Wave 11 MFA gate. ───
 
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
       {impersonation.isImpersonating && (
         <EndImpersonationBanner session={impersonation.session} />
+      )}
+      {showMfaBanner && (
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-emerald-800 bg-emerald-900/40 px-4 py-2 text-sm text-emerald-200"
+          data-testid="mfa-verified-banner"
+        >
+          <CheckCircle2 className="h-4 w-4" aria-hidden />
+          MFA verified — you can now access platform admin tools.
+        </div>
       )}
       <header className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-900 px-4">
         <div className="flex items-center gap-3">

@@ -13,23 +13,72 @@
  *      next page load returns the admin to their normal sign-in flow.
  *
  * Token revocation note: we cannot revoke an already-issued JWT mid-flight.
- * The JWT is short-lived (default 1h) and the SPA tears down the session
- * immediately. Documented TODO: shorten impersonation JWT to 15 minutes via
- * a custom claim policy in a follow-up.
+ * Wave 11 (R-W10-P23-OBS-01): the impersonation session is now capped at 15
+ * min, enforced two ways:
+ *   1. The handler stamps `app_metadata.impersonation_expires_at` (15m ahead).
+ *   2. This banner watches `session.expiresAt` and auto-ends the session
+ *      (calls POST /admin/impersonate/end + signs out) when it elapses, so
+ *      the admin can't continue acting as the impersonated user beyond TTL
+ *      even though the underlying JWT may still be valid.
  */
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
 import { endImpersonation } from '@/lib/services/adminConsoleService';
 import { useImpersonation, type ImpersonationSession } from './useImpersonation';
 
+function formatRemaining(ms: number): string {
+  if (ms <= 0) return '0:00';
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export function EndImpersonationBanner({ session }: { session: ImpersonationSession | null }) {
   const impersonation = useImpersonation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const endSession = useCallback(async () => {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await endImpersonation(session.sessionId);
+      impersonation.clear();
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  }, [session, impersonation]);
+
+  // Wave 11 (R-W10-P23-OBS-01): tick + auto-end at TTL.
+  useEffect(() => {
+    if (!session?.expiresAt) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [session?.expiresAt]);
+
+  useEffect(() => {
+    if (!session?.expiresAt) return;
+    const remainingMs = new Date(session.expiresAt).getTime() - now;
+    if (remainingMs <= 0 && !busy) {
+      // Fire-and-forget; endSession sets busy/error itself.
+      void endSession();
+    }
+  }, [session?.expiresAt, now, busy, endSession]);
 
   if (!session) return null;
+
+  const remainingMs = session.expiresAt
+    ? new Date(session.expiresAt).getTime() - now
+    : null;
 
   return (
     <div
@@ -45,26 +94,21 @@ export function EndImpersonationBanner({ session }: { session: ImpersonationSess
         <span className="opacity-80">
           (org {session.orgId.slice(0, 8)}… — every action is logged)
         </span>
+        {remainingMs !== null && (
+          <span
+            className="rounded bg-red-900/40 px-2 py-0.5 font-mono text-xs"
+            data-testid="impersonation-countdown"
+          >
+            {formatRemaining(remainingMs)}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {error && <span className="text-xs">{error}</span>}
         <button
           type="button"
           disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              await endImpersonation(session.sessionId);
-              impersonation.clear();
-              await supabase.auth.signOut();
-              window.location.href = '/login';
-            } catch (e) {
-              setError(e instanceof Error ? e.message : 'failed');
-            } finally {
-              setBusy(false);
-            }
-          }}
+          onClick={endSession}
           className="rounded-md bg-white px-3 py-1 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-60"
         >
           {busy ? 'Ending…' : 'Stop impersonating'}

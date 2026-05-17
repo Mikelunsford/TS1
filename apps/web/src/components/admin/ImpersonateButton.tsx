@@ -63,12 +63,21 @@ export function ImpersonateButton({
           return;
         }
       }
+      // Wave 11 (R-W10-P23-OBS-01): persist expiresAt so the banner can
+      // auto-end the impersonation at TTL. Fall back to startedAt + expires_in
+      // for backward compat with workers still returning the pre-Wave-11
+      // response shape (no `expires_at`).
+      const startedAtIso = new Date().toISOString();
+      const expiresAtIso =
+        res.expires_at ||
+        new Date(Date.now() + res.expires_in * 1000).toISOString();
       impersonation.setSession({
         sessionId: res.session_id,
         impersonatedUserId: res.impersonated_user_id,
         impersonatedEmail: res.impersonated_email ?? userEmail,
         orgId: res.org_id,
-        startedAt: new Date().toISOString(),
+        startedAt: startedAtIso,
+        expiresAt: expiresAtIso,
       });
       window.location.href = '/';
     } catch (e) {

@@ -96,6 +96,9 @@ export const ImpersonateResponseSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string().nullable(),
   expires_in: z.number().int().positive(),
+  // Wave 11 (R-W10-P23-OBS-01) — ISO timestamp the SPA banner uses to
+  // enforce the 15-minute TTL.
+  expires_at: z.string().optional(),
   impersonated_user_id: z.string().uuid(),
   org_id: z.string().uuid(),
 });

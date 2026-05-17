@@ -167,6 +167,9 @@ const AdminProvisionOrgPage = lazy(() => import('./pages/admin/AdminProvisionOrg
 const AdminImpersonationHistoryPage = lazy(
   () => import('./pages/admin/AdminImpersonationHistoryPage'),
 );
+// Wave 11: MFA enrollment — Sub-agent A owns this entry.
+const AdminEnrollMfaPage = lazy(() => import('./pages/admin/EnrollMfaPage'));
+// End Wave 11 MFA enrollment.
 // End Phase 23 admin routes (Wave 10 Session 4).
 
 // Settings hub (Phase 15) — Phase15-FE owns this block.
@@ -982,6 +985,16 @@ export function AppRoutes() {
             </AdminProtectedRoute>
           }
         />
+        {/* Wave 11: MFA enrollment — Sub-agent A owns this entry. */}
+        <Route
+          path="/admin/enroll-mfa"
+          element={
+            <AdminProtectedRoute>
+              <AdminEnrollMfaPage />
+            </AdminProtectedRoute>
+          }
+        />
+        {/* End Wave 11 MFA enrollment. */}
         {/* End Phase 23 admin routes (Wave 10 Session 4). */}
         <Route
           path="/feature-unavailable"

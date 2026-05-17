@@ -10,11 +10,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ImpersonateButton } from './ImpersonateButton';
 
+// Wave 11 (R-W10-P23-OBS-01): impersonation TTL is 900s (15 min) and the
+// handler returns expires_at so the SPA banner can render a live countdown.
 const impersonateMock = vi.fn(async () => ({
   session_id: '11111111-1111-1111-1111-111111111111',
   access_token: 'token',
   refresh_token: null,
-  expires_in: 3600,
+  expires_in: 900,
+  expires_at: new Date(Date.now() + 900_000).toISOString(),
   impersonated_user_id: '22222222-2222-2222-2222-222222222222',
   impersonated_email: 'target@org.com',
   org_id: '33333333-3333-3333-3333-333333333333',

@@ -75,4 +75,18 @@ describe('EndImpersonationBanner', () => {
 
     Object.defineProperty(window, 'location', { writable: true, value: original });
   });
+
+  // Wave 11 (R-W10-P23-OBS-01) — countdown chip renders when expiresAt is
+  // present in the session payload.
+  it('renders a countdown chip when expiresAt is set', () => {
+    const sessionWithTtl: ImpersonationSession = {
+      ...SESSION,
+      expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    };
+    render(<EndImpersonationBanner session={sessionWithTtl} />);
+    const countdown = screen.getByTestId('impersonation-countdown');
+    expect(countdown).toBeInTheDocument();
+    // Format is m:ss; with ~15 min remaining it should start with "14:" or "15:".
+    expect(countdown.textContent).toMatch(/^1[45]:\d{2}$/);
+  });
 });

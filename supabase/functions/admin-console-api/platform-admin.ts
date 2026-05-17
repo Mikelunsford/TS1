@@ -16,6 +16,12 @@ import { ApiError } from '../_shared/responses.ts';
 import { admin } from '../_shared/handler-helpers.ts';
 import { requireCaller as requireCallerStrict } from '../_shared/tenant.ts';
 import { error as logError } from '../_shared/logger.ts';
+// ─── Wave 11 platform_admin MFA gate — Sub-agent A owns this block. ───
+// Closes R-W10-P23-OBS-02. Every platform_admin call (except the SPA's
+// initial `GET /admin/me` probe, which the enrollment redirect depends on)
+// requires a verified TOTP factor. See supabase/functions/_shared/mfa.ts.
+import { requireMfaVerified } from '../_shared/mfa.ts';
+// ─── End Wave 11 platform_admin MFA gate. ───
 
 export interface PlatformAdminCaller {
   userId: string;
@@ -25,12 +31,30 @@ export interface PlatformAdminCaller {
   homeOrgId: string | null;
 }
 
+export interface RequirePlatformAdminOpts {
+  /**
+   * Skip the MFA verification step. Used by `GET /admin/me` only — the SPA
+   * needs to be able to read its own platform-admin status BEFORE the user
+   * has enrolled an MFA factor, so it can redirect them to /admin/enroll-mfa.
+   * Every other handler leaves this false so MFA is mandatory.
+   */
+  skipMfa?: boolean;
+}
+
 /**
  * Verify the caller is signed in AND has an active row in `platform_admins`.
  * Throws FORBIDDEN otherwise. We do NOT require an `team1_org_id` claim —
  * platform admins may be signed in without an active membership.
+ *
+ * Wave 11 (R-W10-P23-OBS-02): after the platform_admins lookup, we ALSO
+ * require a verified TOTP factor on the caller's account. Throws
+ * `MFA_REQUIRED` (403) when missing. `skipMfa: true` is reserved for the
+ * /admin/me self-check the SPA uses to drive enrollment redirects.
  */
-export async function requirePlatformAdmin(req: Request): Promise<PlatformAdminCaller> {
+export async function requirePlatformAdmin(
+  req: Request,
+  opts: RequirePlatformAdminOpts = {},
+): Promise<PlatformAdminCaller> {
   // Decode the JWT manually rather than calling requireCallerStrict, because
   // the strict variant demands a non-null `team1_org_id` claim — platform
   // admins may not be members of any org.
@@ -80,6 +104,14 @@ export async function requirePlatformAdmin(req: Request): Promise<PlatformAdminC
   if (!data) {
     throw new ApiError('FORBIDDEN', 'caller is not a platform admin', 403);
   }
+
+  // ─── Wave 11 platform_admin MFA gate — Sub-agent A owns this block. ───
+  // Closes R-W10-P23-OBS-02. /admin/me is the only handler that opts out
+  // (so the SPA can detect platform-admin status before enrollment).
+  if (!opts.skipMfa) {
+    await requireMfaVerified(sb, userId, req);
+  }
+  // ─── End Wave 11 platform_admin MFA gate. ───
 
   return { userId, homeOrgId };
 }
