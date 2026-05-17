@@ -56,6 +56,12 @@ import {
   type Caller,
 } from '../_helpers.ts';
 import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For journal_entries: post/reverse are already trigger-audited (mig 0058).
+// We instrument create + non-state PATCH (draft-only edits).
 
 const JE_COLS =
   'id, org_id, entry_number, entry_date, description, status, source_type, ' +
@@ -334,6 +340,15 @@ export async function createJournalEntry({ req }: Ctx): Promise<Response> {
         }
 
         const lines = await fetchJeLines(caller, je.id);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'journal_entry',
+          entity_id: je.id,
+          action: 'create',
+          after: { ...rowToJe(je), line_count: lines.length } as unknown as Record<string, unknown>,
+        });
         return {
           status: 201,
           body: { data: { ...rowToJe(je), lines: lines.map(rowToJel) } },
@@ -448,6 +463,16 @@ export async function patchJournalEntry({ req, params }: Ctx): Promise<Response>
         }
 
         const lines = await fetchJeLines(caller, id);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep — draft-edit, non-state).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'journal_entry',
+          entity_id: id,
+          action: 'update',
+          before: rowToJe(existing) as unknown as Record<string, unknown>,
+          after: { ...rowToJe(data as JeRow), line_count: lines.length } as unknown as Record<string, unknown>,
+        });
         return {
           status: 200,
           body: { data: { ...rowToJe(data as JeRow), lines: lines.map(rowToJel) } },

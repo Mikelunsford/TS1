@@ -42,6 +42,14 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For period_close: /close + /reopen go through close_period / reopen_period
+// RPCs which stamp closed_at / reopened_at; those are covered by DB audit.
+// PATCH only handles open ↔ in_review + notes editing — we instrument
+// create + the PATCH path.
 
 const PC_COLS =
   'id, org_id, period_start, period_end, status, closed_at, closed_by_user_id, ' +
@@ -210,7 +218,17 @@ export async function createPeriodClose({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToPc(data as PcRow) } };
+        const pc = rowToPc(data as PcRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'period_close',
+          entity_id: pc.id,
+          action: 'create',
+          after: pc as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: pc } };
       },
     );
   } catch (e) {
@@ -270,7 +288,20 @@ export async function patchPeriodClose({ req, params }: Ctx): Promise<Response> 
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToPc(data as PcRow) } };
+        const after = rowToPc(data as PcRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep — non-close edits).
+        // /close + /reopen routes are NOT instrumented here — they fire the
+        // close_period / reopen_period RPCs which audit at the DB layer.
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'period_close',
+          entity_id: id,
+          action: 'update',
+          before: rowToPc(existing) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {

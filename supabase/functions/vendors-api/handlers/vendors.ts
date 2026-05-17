@@ -25,6 +25,10 @@ import {
   VendorCreateSchema,
   VendorPatchSchema,
 } from '../../_shared/types.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
 
 const BUNDLE = 'vendors-api';
 const VENDOR_COLS =
@@ -91,6 +95,15 @@ export async function createVendor({ req }: Ctx): Promise<Response> {
       .select(VENDOR_COLS)
       .single();
     if (error) throw new ApiError('INTERNAL_ERROR', 'failed to create vendor', 500, { db: error.message });
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'vendor',
+      entity_id: (data as { id: string }).id,
+      action: 'create',
+      after: data as unknown as Record<string, unknown>,
+    });
     return { status: 201, body: { data } };
   });
 }
@@ -137,6 +150,15 @@ export async function patchVendor({ req, params }: Ctx): Promise<Response> {
       }
       throw new ApiError('INTERNAL_ERROR', 'failed to update vendor', 500, { db: error.message });
     }
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'vendor',
+      entity_id: params.id,
+      action: 'update',
+      after: data as unknown as Record<string, unknown>,
+    });
     return { status: 200, body: { data } };
   });
 }
@@ -156,6 +178,15 @@ export async function archiveVendor({ req, params }: Ctx): Promise<Response> {
       .maybeSingle();
     if (error) throw new ApiError('INTERNAL_ERROR', 'failed to archive vendor', 500, { db: error.message });
     if (!data) throw new ApiError('NOT_FOUND', 'vendor not found', 404);
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'vendor',
+      entity_id: params.id,
+      action: 'archive',
+      after: { is_active: false },
+    });
     return { status: 200, body: { data } };
   });
 }

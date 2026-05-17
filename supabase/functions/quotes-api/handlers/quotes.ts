@@ -67,6 +67,12 @@ import {
   type Caller,
 } from '../../_shared/handler-helpers.ts';
 import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For quotes: workflow transitions (submit/approve/decline/etc.) are covered
+// by the quotes state trigger. We instrument create + non-state PATCH here.
 
 const QUOTE_COLS =
   'id, org_id, quote_number, customer_id, customer_name, contact_name, contact_email, ' +
@@ -342,7 +348,17 @@ export async function createQuote({ req }: Ctx): Promise<Response> {
           detail: error?.message,
         });
       }
-      return { status: 201, body: { data: rowToQuote(data as QuoteRow) } };
+      const quote = rowToQuote(data as QuoteRow);
+      // Phase 17 step-8: audit_log write (Wave 11B sweep).
+      await writeAudit({
+        actor_user_id: caller.userId,
+        org_id: caller.orgId,
+        entity_type: 'quote',
+        entity_id: quote.id,
+        action: 'create',
+        after: quote as unknown as Record<string, unknown>,
+      });
+      return { status: 201, body: { data: quote } };
     });
   } catch (e) {
     if (e instanceof ApiError) return fromApiError(e, req);
@@ -398,7 +414,18 @@ export async function patchQuote({ req, params }: Ctx): Promise<Response> {
           detail: error?.message,
         });
       }
-      return { status: 200, body: { data: rowToQuote(data as QuoteRow) } };
+      const after = rowToQuote(data as QuoteRow);
+      // Phase 17 step-8: audit_log write (Wave 11B sweep — draft edit, non-state).
+      await writeAudit({
+        actor_user_id: caller.userId,
+        org_id: caller.orgId,
+        entity_type: 'quote',
+        entity_id: id,
+        action: 'update',
+        before: rowToQuote(existing) as unknown as Record<string, unknown>,
+        after: after as unknown as Record<string, unknown>,
+      });
+      return { status: 200, body: { data: after } };
     });
   } catch (e) {
     if (e instanceof ApiError) return fromApiError(e, req);

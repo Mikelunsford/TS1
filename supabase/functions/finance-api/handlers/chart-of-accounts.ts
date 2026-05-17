@@ -39,6 +39,11 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// chart_of_accounts has no state machine — all routes are non-state CRUD.
 
 const COA_COLS =
   'id, org_id, account_code, label, account_type, parent_id, currency_code, ' +
@@ -212,7 +217,17 @@ export async function createChartOfAccount({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToCoa(data as CoaRow) } };
+        const coa = rowToCoa(data as CoaRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'chart_of_account',
+          entity_id: coa.id,
+          action: 'create',
+          after: coa as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: coa } };
       },
     );
   } catch (e) {
@@ -298,7 +313,18 @@ export async function patchChartOfAccount({ req, params }: Ctx): Promise<Respons
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToCoa(data as CoaRow) } };
+        const after = rowToCoa(data as CoaRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'chart_of_account',
+          entity_id: id,
+          action: 'update',
+          before: rowToCoa(existing) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {
@@ -342,6 +368,15 @@ export async function archiveChartOfAccount({ req, params }: Ctx): Promise<Respo
             detail: error?.message,
           });
         }
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'chart_of_account',
+          entity_id: id,
+          action: 'archive',
+          after: { is_active: false },
+        });
         return { status: 200, body: { data: rowToCoa(data as CoaRow) } };
       },
     );

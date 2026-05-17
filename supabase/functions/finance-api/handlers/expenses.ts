@@ -29,6 +29,13 @@ import {
   ExpenseRejectSchema,
 } from '../../_shared/types.ts';
 import { assertTransition, WorkflowError } from '../../_shared/workflow.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For expenses: workflow transitions (submit/approve/reject/pay/reimburse) flow
+// through `transitionExpense()` and are covered by the expenses state trigger
+// added in 0058. We instrument create + non-state PATCH here.
 
 const BUNDLE = 'finance-api';
 const EXP_COLS =
@@ -111,6 +118,15 @@ export async function createExpense({ req }: Ctx): Promise<Response> {
       .select(EXP_COLS)
       .single();
     if (error) throw new ApiError('INTERNAL_ERROR', 'failed to create expense', 500, { db: error.message });
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'expense',
+      entity_id: (data as { id: string }).id,
+      action: 'create',
+      after: data as unknown as Record<string, unknown>,
+    });
     return { status: 201, body: { data } };
   });
 }
@@ -165,6 +181,15 @@ export async function patchExpense({ req, params }: Ctx): Promise<Response> {
       .select(EXP_COLS)
       .single();
     if (error) throw new ApiError('INTERNAL_ERROR', 'failed to update expense', 500, { db: error.message });
+    // Phase 17 step-8: audit_log write (Wave 11B sweep — non-state edit).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'expense',
+      entity_id: params.id,
+      action: 'update',
+      after: data as unknown as Record<string, unknown>,
+    });
     return { status: 200, body: { data } };
   });
 }

@@ -33,6 +33,11 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// warehouses has no state machine — all routes are non-state CRUD.
 
 const WH_COLS =
   'id, org_id, code, label, address, is_default, is_active, created_at, updated_at';
@@ -120,7 +125,17 @@ export async function createWarehouse({ req }: Ctx): Promise<Response> {
       }
       throw new ApiError('INTERNAL_ERROR', 'warehouse insert failed', 500, { detail: error?.message });
     }
-    return { status: 201, body: { data: rowToWarehouse(data as WarehouseRow) } };
+    const wh = rowToWarehouse(data as WarehouseRow);
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'warehouse',
+      entity_id: wh.id,
+      action: 'create',
+      after: wh as unknown as Record<string, unknown>,
+    });
+    return { status: 201, body: { data: wh } };
   });
 }
 
@@ -165,7 +180,17 @@ export async function patchWarehouse({ req, params }: Ctx): Promise<Response> {
       }
       throw new ApiError('INTERNAL_ERROR', 'warehouse update failed', 500, { detail: error?.message });
     }
-    return { status: 200, body: { data: rowToWarehouse(data as WarehouseRow) } };
+    const wh = rowToWarehouse(data as WarehouseRow);
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'warehouse',
+      entity_id: id,
+      action: 'update',
+      after: wh as unknown as Record<string, unknown>,
+    });
+    return { status: 200, body: { data: wh } };
   });
 }
 
@@ -190,6 +215,15 @@ export async function archiveWarehouse({ req, params }: Ctx): Promise<Response> 
     if (error || !data) {
       throw new ApiError('INTERNAL_ERROR', 'warehouse archive failed', 500, { detail: error?.message });
     }
+    // Phase 17 step-8: audit_log write (Wave 11B sweep).
+    await writeAudit({
+      actor_user_id: caller.userId,
+      org_id: caller.orgId,
+      entity_type: 'warehouse',
+      entity_id: id,
+      action: 'archive',
+      after: { is_active: false },
+    });
     return { status: 200, body: { data: rowToWarehouse(data as WarehouseRow) } };
   });
 }
