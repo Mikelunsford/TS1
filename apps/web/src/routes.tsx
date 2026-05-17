@@ -10,7 +10,6 @@ import { AdminProtectedRoute } from './auth/AdminProtectedRoute';
 // End Phase 23 admin guard (Wave 10 Session 4).
 import { RequireFlag } from './components/shell/RequireFlag';
 
-const PlaceholderHome = lazy(() => import('./pages/PlaceholderHome'));
 const FeatureUnavailable = lazy(() => import('./pages/FeatureUnavailable'));
 const SignIn = lazy(() => import('./pages/SignIn'));
 const AuthCallback = lazy(() => import('./pages/AuthCallback'));
@@ -193,14 +192,12 @@ export function AppRoutes() {
       <Routes>
         <Route path="/login" element={<SignIn />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <PlaceholderHome />
-            </ProtectedRoute>
-          }
-        />
+        {/* Wave 10 fix — `/` now redirects to /dashboard. PlaceholderHome
+            (the Wave 1 welcome card) was still wired here through Sessions
+            1-4 and rendered stale "Identity & tenancy is live" copy after
+            login. Customer/vendor portal users are intercepted earlier in
+            <ProtectedRoute> and never hit this redirect. */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/crm"
           element={
