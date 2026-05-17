@@ -143,13 +143,13 @@ export default function InvoiceDetailPage() {
     mutationFn: () => getInvoicePdf(id),
     onSuccess: () => {
       toast.message('PDF endpoint reserved', {
-        description: 'Phase 19 will wire actual rendering.',
+        description: 'PDF rendering not yet available. Try again later.',
       });
     },
     onError: () => {
       // Server intentionally returns 501 today — surface the same UX.
       toast.message('PDF not yet available', {
-        description: 'Phase 19 will wire actual rendering.',
+        description: 'PDF rendering failed. Try again later.',
       });
     },
   });

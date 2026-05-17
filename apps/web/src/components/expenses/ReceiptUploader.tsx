@@ -1,8 +1,7 @@
 /**
- * Receipt URL input — placeholder for Phase 16 attachments. Until the
- * attachments service lands, expenses just carry a `receipt_url` text
- * field that a user can paste into. Accepts any string up to 2048 chars
- * (matches the BE schema).
+ * Receipt URL input. Until the attachments service lands, expenses just
+ * carry a `receipt_url` text field that a user can paste into. Accepts
+ * any string up to 2048 chars (matches the BE schema).
  */
 interface Props {
   value: string;
@@ -26,7 +25,7 @@ export function ReceiptUploader({ value, onChange, id, disabled }: Props) {
         data-testid="receipt-url-input"
       />
       <p className="text-xs text-fg-subtle">
-        Paste a link to a hosted receipt for now. Phase 16 attachments will add real upload.
+        Paste a receipt URL. File uploads coming with attachments.
       </p>
     </div>
   );

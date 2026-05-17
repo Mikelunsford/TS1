@@ -50,26 +50,16 @@ export default function PortalInvoiceDetailPage() {
           <h1 className="text-2xl font-semibold">Invoice {inv.invoice_number}</h1>
           <p className="text-fg-muted capitalize">{inv.status.replace(/_/g, ' ')}</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {data.pdf_url && (
-            <a
-              href={data.pdf_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle"
-            >
-              <Download className="h-4 w-4" /> Download PDF
-            </a>
-          )}
-          <button
-            type="button"
-            disabled
-            title="Pay Now is coming soon."
-            className="cursor-not-allowed rounded-md bg-bg-subtle px-3 py-1.5 text-sm text-fg-muted"
+        {data.pdf_url && (
+          <a
+            href={data.pdf_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle"
           >
-            Pay Now (coming soon)
-          </button>
-        </div>
+            <Download className="h-4 w-4" /> Download PDF
+          </a>
+        )}
       </header>
 
       <section className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">

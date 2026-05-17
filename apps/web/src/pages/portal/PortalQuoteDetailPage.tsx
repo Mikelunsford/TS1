@@ -44,36 +44,16 @@ export default function PortalQuoteDetailPage() {
           <h1 className="text-2xl font-semibold">Quote {q.quote_number}</h1>
           <p className="text-fg-muted capitalize">{q.status.replace(/_/g, ' ')}</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          {data.pdf_url && (
-            <a
-              href={data.pdf_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle"
-            >
-              <Download className="h-4 w-4" /> Download PDF
-            </a>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled
-              title="Accept is coming soon."
-              className="cursor-not-allowed rounded-md bg-bg-subtle px-3 py-1.5 text-sm text-fg-muted"
-            >
-              Accept (coming soon)
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Reject is coming soon."
-              className="cursor-not-allowed rounded-md bg-bg-subtle px-3 py-1.5 text-sm text-fg-muted"
-            >
-              Reject (coming soon)
-            </button>
-          </div>
-        </div>
+        {data.pdf_url && (
+          <a
+            href={data.pdf_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-subtle"
+          >
+            <Download className="h-4 w-4" /> Download PDF
+          </a>
+        )}
       </header>
 
       <section className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">

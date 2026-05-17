@@ -118,7 +118,7 @@ export default function ProjectCreatePage() {
               type="text"
               value={form.customer_name ?? ''}
               onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-              placeholder="Free-text; customer picker arrives later"
+              placeholder="Customer name"
               className="rounded-md border border-border bg-bg px-2 py-1 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand"
             />
           </div>
