@@ -11,8 +11,8 @@ import { toast } from 'sonner';
 import { ExportButton } from '@/components/exports/ExportButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { TableSkeleton } from '@/components/ui/Skeleton';
-import { cn } from '@/lib/cn';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { chartOfAccountKeys } from '@/lib/queryKeys/chartOfAccounts';
 import {
@@ -105,26 +105,15 @@ export default function AccountListPage() {
         aria-label="Type filter"
         data-testid="type-chips"
       >
-        {TYPE_VALUES.map((t) => {
-          const active = accountType === t;
-          return (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggleType(t)}
-              aria-pressed={active}
-              className={cn(
-                'rounded-full border px-3 py-0.5 text-xs font-medium capitalize',
-                active
-                  ? 'border-brand bg-brand text-brand-fg'
-                  : 'border-border bg-bg text-fg-muted hover:bg-bg-muted',
-              )}
-              data-testid={`type-chip-${t}`}
-            >
-              {t}
-            </button>
-          );
-        })}
+        {TYPE_VALUES.map((t) => (
+          <FilterChip
+            key={t}
+            label={t}
+            active={accountType === t}
+            onClick={() => toggleType(t)}
+            testId={`type-chip-${t}`}
+          />
+        ))}
         <select
           value={isActiveParam}
           onChange={(e) => update({ is_active: e.target.value })}

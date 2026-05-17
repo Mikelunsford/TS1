@@ -1,58 +1,80 @@
-import { Badge } from '@/components/ui/Badge';
+/**
+ * Project + phase status pills. Maps the prod `project_state` and
+ * `phase_status` enums onto the shared <StatusBadge> primitive.
+ *
+ * UI-audit refactor (2026-05-18): thin wrappers around <StatusBadge>.
+ * Public API preserved: callers pass `status: string` (open-enum-safe).
+ * Unknown values render as a neutral pill with the raw text so a future
+ * enum addition doesn't crash the SPA.
+ */
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { PhaseStatus, ProjectState } from '@/lib/types';
 
-type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
-
-const projectToneByStatus: Record<ProjectState, Tone> = {
-  pending: 'neutral',
-  ready_to_build: 'info',
-  in_production: 'info',
-  ready_to_ship: 'warning',
-  completed: 'success',
-  cancelled: 'danger',
+const PROJECT_TONE: Record<ProjectState, { tone: Tone; label: string }> = {
+  pending: { tone: 'neutral', label: 'Pending' },
+  ready_to_build: { tone: 'info', label: 'Ready to Build' },
+  in_production: { tone: 'info', label: 'In Production' },
+  ready_to_ship: { tone: 'warning', label: 'Ready to Ship' },
+  completed: { tone: 'success', label: 'Completed' },
+  cancelled: { tone: 'danger', label: 'Cancelled' },
 };
 
-const projectLabelByStatus: Record<ProjectState, string> = {
-  pending: 'Pending',
-  ready_to_build: 'Ready to Build',
-  in_production: 'In Production',
-  ready_to_ship: 'Ready to Ship',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-};
-
-/**
- * Project status pill. Maps the prod `project_state` enum onto Badge tones
- * so list and detail views stay consistent. Unknown values render as a
- * neutral pill with the raw text so a future enum addition doesn't crash.
- */
-export function ProjectStatusBadge({ status }: { status: string }) {
-  if (status in projectToneByStatus) {
-    const known = status as ProjectState;
-    return <Badge tone={projectToneByStatus[known]}>{projectLabelByStatus[known]}</Badge>;
-  }
-  return <Badge tone="neutral">{status}</Badge>;
+function isProjectState(s: string): s is ProjectState {
+  return s in PROJECT_TONE;
 }
 
-const phaseToneByStatus: Record<PhaseStatus, Tone> = {
-  pending: 'neutral',
-  active: 'info',
-  completed: 'success',
-  cancelled: 'danger',
+export function ProjectStatusBadge({ status }: { status: string }) {
+  if (isProjectState(status)) {
+    const { tone, label } = PROJECT_TONE[status];
+    return (
+      <StatusBadge
+        tone={tone}
+        label={label}
+        ariaLabel={`Project status: ${label}`}
+        testId={`project-status-${status}`}
+      />
+    );
+  }
+  return (
+    <StatusBadge
+      tone="neutral"
+      label={status}
+      ariaLabel={`Project status: ${status}`}
+      testId={`project-status-${status}`}
+    />
+  );
+}
+
+const PHASE_TONE: Record<PhaseStatus, { tone: Tone; label: string }> = {
+  pending: { tone: 'neutral', label: 'Pending' },
+  active: { tone: 'info', label: 'Active' },
+  completed: { tone: 'success', label: 'Completed' },
+  cancelled: { tone: 'danger', label: 'Cancelled' },
 };
 
-const phaseLabelByStatus: Record<PhaseStatus, string> = {
-  pending: 'Pending',
-  active: 'Active',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-};
+function isPhaseStatus(s: string): s is PhaseStatus {
+  return s in PHASE_TONE;
+}
 
 /** Phase status pill — mirrors ProjectStatusBadge for the four phase states. */
 export function PhaseStatusBadge({ status }: { status: string }) {
-  if (status in phaseToneByStatus) {
-    const known = status as PhaseStatus;
-    return <Badge tone={phaseToneByStatus[known]}>{phaseLabelByStatus[known]}</Badge>;
+  if (isPhaseStatus(status)) {
+    const { tone, label } = PHASE_TONE[status];
+    return (
+      <StatusBadge
+        tone={tone}
+        label={label}
+        ariaLabel={`Phase status: ${label}`}
+        testId={`phase-status-${status}`}
+      />
+    );
   }
-  return <Badge tone="neutral">{status}</Badge>;
+  return (
+    <StatusBadge
+      tone="neutral"
+      label={status}
+      ariaLabel={`Phase status: ${status}`}
+      testId={`phase-status-${status}`}
+    />
+  );
 }

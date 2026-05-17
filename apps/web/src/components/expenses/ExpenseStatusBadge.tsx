@@ -2,26 +2,19 @@
  * Colored badge for expenses.status (6 values, verified against
  * schema_migrations=0058 / prod `expenses.status` text CHECK). No
  * `cancelled` state — rejected expenses can be resubmitted.
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around <StatusBadge>.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { ExpenseState } from '@/lib/workflow';
 
-const STATUS_CLASSES: Record<ExpenseState, string> = {
-  draft: 'bg-bg-muted text-fg ring-1 ring-border',
-  submitted: 'bg-info/10 text-info ring-1 ring-info/30',
-  approved: 'bg-info/10 text-info ring-1 ring-info/30',
-  rejected: 'bg-danger/10 text-danger ring-1 ring-danger/30',
-  reimbursed: 'bg-success/10 text-success ring-1 ring-success/30',
-  paid: 'bg-success/10 text-success ring-1 ring-success/30',
-};
-
-const STATUS_LABELS: Record<ExpenseState, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  reimbursed: 'Reimbursed',
-  paid: 'Paid',
+const TONE: Record<ExpenseState, { tone: Tone; label: string }> = {
+  draft: { tone: 'neutral', label: 'Draft' },
+  submitted: { tone: 'info', label: 'Submitted' },
+  approved: { tone: 'info', label: 'Approved' },
+  rejected: { tone: 'danger', label: 'Rejected' },
+  reimbursed: { tone: 'success', label: 'Reimbursed' },
+  paid: { tone: 'success', label: 'Paid' },
 };
 
 export function ExpenseStatusBadge({
@@ -31,16 +24,14 @@ export function ExpenseStatusBadge({
   status: ExpenseState;
   className?: string;
 }) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-      data-testid={`expense-status-${status}`}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Expense status: ${label}`}
+      testId={`expense-status-${status}`}
+      className={className}
+    />
   );
 }

@@ -1,41 +1,37 @@
 /**
- * Colored badge for a lead's status enum value. Status color map mirrors the
- * design system tokens — bg-* / text-* pairs picked from tailwind.config.ts.
+ * Colored badge for a lead's status enum value (5 values).
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around <StatusBadge>.
+ * `converted` was previously rendered with a brand-subtle tint; the audit
+ * pass standardises this to the `accent` tone so it's distinguishable from
+ * the brand-coloured navigation chrome.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { LeadStatus } from '@/lib/types';
 
-type Props = {
+const TONE: Record<LeadStatus, { tone: Tone; label: string }> = {
+  new: { tone: 'neutral', label: 'New' },
+  contacted: { tone: 'info', label: 'Contacted' },
+  qualified: { tone: 'success', label: 'Qualified' },
+  disqualified: { tone: 'danger', label: 'Disqualified' },
+  converted: { tone: 'accent', label: 'Converted' },
+};
+
+export function LeadStatusBadge({
+  status,
+  className,
+}: {
   status: LeadStatus;
   className?: string;
-};
-
-const STATUS_CLASSES: Record<LeadStatus, string> = {
-  new: 'bg-bg-subtle text-fg',
-  contacted: 'bg-info/15 text-info',
-  qualified: 'bg-success/15 text-success',
-  disqualified: 'bg-danger/15 text-danger',
-  converted: 'bg-brand-subtle text-brand',
-};
-
-const STATUS_LABELS: Record<LeadStatus, string> = {
-  new: 'New',
-  contacted: 'Contacted',
-  qualified: 'Qualified',
-  disqualified: 'Disqualified',
-  converted: 'Converted',
-};
-
-export function LeadStatusBadge({ status, className }: Props) {
+}) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Lead status: ${label}`}
+      testId={`lead-status-${status}`}
+      className={className}
+    />
   );
 }

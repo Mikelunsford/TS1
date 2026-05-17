@@ -1,33 +1,24 @@
 /**
  * Colored badge for an invoice's `status` enum (9 values, verified against
- * schema_migrations=0052 / prod `invoices.status` text CHECK). Mirrors the
- * tone vocabulary of QuoteStatusBadge.
+ * schema_migrations=0052 / prod `invoices.status` text CHECK).
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around the shared
+ * <StatusBadge> primitive. Tone vocabulary unchanged; aria-label and
+ * data-testid preserved.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { InvoiceState } from '@/lib/types';
 
-const STATUS_CLASSES: Record<InvoiceState, string> = {
-  draft: 'bg-bg-muted text-fg ring-1 ring-border',
-  pending: 'bg-info/10 text-info ring-1 ring-info/30',
-  sent: 'bg-info/10 text-info ring-1 ring-info/30',
-  partially_paid: 'bg-warning/10 text-warning ring-1 ring-warning/30',
-  paid: 'bg-success/10 text-success ring-1 ring-success/30',
-  overdue: 'bg-danger/10 text-danger ring-1 ring-danger/30',
-  on_hold: 'bg-warning/10 text-warning ring-1 ring-warning/30',
-  refunded: 'bg-bg-muted text-fg-muted ring-1 ring-border',
-  cancelled: 'bg-bg-muted text-fg-muted ring-1 ring-border',
-};
-
-const STATUS_LABELS: Record<InvoiceState, string> = {
-  draft: 'Draft',
-  pending: 'Pending',
-  sent: 'Sent',
-  partially_paid: 'Partially paid',
-  paid: 'Paid',
-  overdue: 'Overdue',
-  on_hold: 'On hold',
-  refunded: 'Refunded',
-  cancelled: 'Cancelled',
+const TONE: Record<InvoiceState, { tone: Tone; label: string }> = {
+  draft: { tone: 'neutral', label: 'Draft' },
+  pending: { tone: 'info', label: 'Pending' },
+  sent: { tone: 'info', label: 'Sent' },
+  partially_paid: { tone: 'warning', label: 'Partially paid' },
+  paid: { tone: 'success', label: 'Paid' },
+  overdue: { tone: 'danger', label: 'Overdue' },
+  on_hold: { tone: 'warning', label: 'On hold' },
+  refunded: { tone: 'muted', label: 'Refunded' },
+  cancelled: { tone: 'muted', label: 'Cancelled' },
 };
 
 export function InvoiceStatusBadge({
@@ -37,16 +28,14 @@ export function InvoiceStatusBadge({
   status: InvoiceState;
   className?: string;
 }) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-      data-testid={`invoice-status-${status}`}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Invoice status: ${label}`}
+      testId={`invoice-status-${status}`}
+      className={className}
+    />
   );
 }

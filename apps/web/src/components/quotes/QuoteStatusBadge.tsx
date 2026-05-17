@@ -1,28 +1,19 @@
 /**
- * Colored badge for a quote's `status` enum value. Status color map mirrors
- * the same tone vocabulary the lead/opportunity badges use, but is keyed on
- * the prod `quote_state` enum (verified 2026-05-15 against schema_migrations
- * 0050).
+ * Colored badge for a quote's `status` enum value (6 values, verified against
+ * schema_migrations=0050 / prod `quote_state` enum).
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around <StatusBadge>.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { QuoteState } from '@/lib/types';
 
-const STATUS_CLASSES: Record<QuoteState, string> = {
-  draft: 'bg-bg-muted text-fg ring-1 ring-border',
-  submitted: 'bg-info/10 text-info ring-1 ring-info/30',
-  revise_requested: 'bg-warning/10 text-warning ring-1 ring-warning/30',
-  approved: 'bg-success/10 text-success ring-1 ring-success/30',
-  project_pending: 'bg-success/10 text-success ring-1 ring-success/30',
-  cancelled: 'bg-danger/10 text-danger ring-1 ring-danger/30',
-};
-
-const STATUS_LABELS: Record<QuoteState, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  revise_requested: 'Revise requested',
-  approved: 'Approved',
-  project_pending: 'Project pending',
-  cancelled: 'Cancelled',
+const TONE: Record<QuoteState, { tone: Tone; label: string }> = {
+  draft: { tone: 'neutral', label: 'Draft' },
+  submitted: { tone: 'info', label: 'Submitted' },
+  revise_requested: { tone: 'warning', label: 'Revise requested' },
+  approved: { tone: 'success', label: 'Approved' },
+  project_pending: { tone: 'success', label: 'Project pending' },
+  cancelled: { tone: 'danger', label: 'Cancelled' },
 };
 
 export function QuoteStatusBadge({
@@ -32,15 +23,14 @@ export function QuoteStatusBadge({
   status: QuoteState;
   className?: string;
 }) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Quote status: ${label}`}
+      testId={`quote-status-${status}`}
+      className={className}
+    />
   );
 }
