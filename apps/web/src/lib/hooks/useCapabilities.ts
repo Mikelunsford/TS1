@@ -14,7 +14,7 @@
  */
 import { useMemo } from 'react';
 
-import { useAuth } from '../../auth/AuthContext';
+import { useAuthOptional } from '../../auth/AuthContext';
 import { can } from '../capabilities';
 import { useMe } from './useMe';
 
@@ -29,8 +29,12 @@ export interface CapabilitiesApi {
 }
 
 export function useCapabilities() {
-  const { state } = useAuth();
-  const me = useMe({ enabled: state.status === 'authenticated' });
+  // In real app: AuthProvider is present, gate useMe on hydrated session.
+  // In unit tests: no AuthProvider; default `enabled` so test mocks of
+  // useMe via React Query's defaultOptions still work as before.
+  const auth = useAuthOptional();
+  const enabled = auth ? auth.state.status === 'authenticated' : undefined;
+  const me = useMe(enabled === undefined ? {} : { enabled });
   const role = me.data?.active_role ?? null;
 
   return useMemo(

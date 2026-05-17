@@ -77,3 +77,15 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
+
+/**
+ * Variant of useAuth that returns undefined when no <AuthProvider> is in the
+ * tree, instead of throwing. Use this in low-level hooks like
+ * `useCapabilities` that may be rendered by component-level unit tests
+ * which don't set up the auth provider (those tests pass capability data
+ * via mocks, not via real auth).
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useAuthOptional(): AuthContextValue | undefined {
+  return useContext(AuthContext);
+}
