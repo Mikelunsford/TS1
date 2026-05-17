@@ -33,7 +33,11 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     if (accent) root.style.setProperty('--accent', accent);
     if (brandFg) root.style.setProperty('--brand-fg', brandFg);
 
-    const appName = data.app_name_override ?? 'Team1';
+    // R-W11-BRANDING-01: fall back to the neutral product name, never to
+    // Team1's label. Orgs without an `app_name_override` (e.g. KitStak,
+    // any newly-provisioned tenant) should see "TS1" in the title bar
+    // rather than another tenant's name leaking through.
+    const appName = data.app_name_override ?? 'TS1';
     document.title = appName;
 
     const favHref = data.icon_url ?? data.logo_url;
