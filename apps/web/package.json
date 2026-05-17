@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:e2e": "playwright test",
-    "test:rls": "playwright test playwright/rls-probe.spec.ts",
+    "test:rls": "playwright test playwright/rls-probe.spec.ts playwright/rls-multi-org-probe.spec.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 0",
     "bundle-budget": "size-limit"
