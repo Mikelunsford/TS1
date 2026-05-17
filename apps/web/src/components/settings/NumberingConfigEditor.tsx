@@ -1,7 +1,7 @@
 /**
  * NumberingConfigEditor — Phase 15. Reads/writes numbering_sequences via
- * settings-api. If Phase 14 hasn't shipped, the BE returns items=[] with
- * meta.phase14_pending, and we render an empty state.
+ * settings-api. Field names mirror the prod DB columns
+ * (doc_type / pad_width / reset_period) — see R-W11-NUMBERING-01 closeout.
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -25,8 +25,7 @@ export function NumberingConfigEditor() {
   if (items.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border bg-bg-muted px-4 py-6 text-sm text-fg-muted">
-        Numbering configuration is not yet available. It lights up once Phase 14
-        ships.
+        No numbering sequences are configured for this workspace yet.
       </div>
     );
   }
@@ -35,7 +34,7 @@ export function NumberingConfigEditor() {
     <div className="space-y-3">
       {items.map((row) => (
         <NumberingRowEditor
-          key={row.kind}
+          key={row.doc_type}
           row={row}
           onSaved={() => qc.invalidateQueries({ queryKey: settingsKeys.numbering() })}
         />
@@ -46,16 +45,20 @@ export function NumberingConfigEditor() {
 
 function NumberingRowEditor({ row, onSaved }: { row: NumberingRow; onSaved: () => void }) {
   const [prefix, setPrefix] = useState(row.prefix ?? '');
-  const [pad, setPad] = useState(row.pad ?? 4);
-  const [autoReset, setAutoReset] = useState<'never' | 'yearly' | 'monthly'>(
-    (row.auto_reset as 'never' | 'yearly' | 'monthly' | null) ?? 'never',
+  const [padWidth, setPadWidth] = useState(row.pad_width ?? 5);
+  const [resetPeriod, setResetPeriod] = useState<'never' | 'yearly' | 'monthly'>(
+    row.reset_period ?? 'yearly',
   );
-  const dirty = prefix !== (row.prefix ?? '') || pad !== (row.pad ?? 4) || autoReset !== (row.auto_reset ?? 'never');
+  const dirty =
+    prefix !== (row.prefix ?? '')
+    || padWidth !== (row.pad_width ?? 5)
+    || resetPeriod !== (row.reset_period ?? 'yearly');
 
   const mutation = useMutation({
-    mutationFn: () => updateNumbering(row.kind, { prefix, pad, auto_reset: autoReset }),
+    mutationFn: () =>
+      updateNumbering(row.doc_type, { prefix, pad_width: padWidth, reset_period: resetPeriod }),
     onSuccess: () => {
-      toast.success(`Updated ${row.kind} numbering`);
+      toast.success(`Updated ${row.doc_type} numbering`);
       onSaved();
     },
     onError: () => toast.error('Save failed'),
@@ -63,7 +66,7 @@ function NumberingRowEditor({ row, onSaved }: { row: NumberingRow; onSaved: () =
 
   return (
     <div className="rounded-md border border-border bg-bg p-3">
-      <div className="text-sm font-medium text-fg">{row.kind}</div>
+      <div className="text-sm font-medium text-fg">{row.doc_type}</div>
       <div className="mt-2 grid grid-cols-3 gap-3">
         <label className="text-xs text-fg-muted">
           Prefix
@@ -75,22 +78,22 @@ function NumberingRowEditor({ row, onSaved }: { row: NumberingRow; onSaved: () =
           />
         </label>
         <label className="text-xs text-fg-muted">
-          Pad
+          Pad width
           <input
             type="number"
             min={0}
             max={12}
             className="mt-0.5 block w-full rounded-md border border-border bg-bg px-2 py-1 text-sm"
-            value={pad}
-            onChange={(e) => setPad(Number(e.target.value))}
+            value={padWidth}
+            onChange={(e) => setPadWidth(Number(e.target.value))}
           />
         </label>
         <label className="text-xs text-fg-muted">
-          Auto-reset
+          Reset period
           <select
             className="mt-0.5 block w-full rounded-md border border-border bg-bg px-2 py-1 text-sm"
-            value={autoReset}
-            onChange={(e) => setAutoReset(e.target.value as 'never' | 'yearly' | 'monthly')}
+            value={resetPeriod}
+            onChange={(e) => setResetPeriod(e.target.value as 'never' | 'yearly' | 'monthly')}
           >
             <option value="never">Never</option>
             <option value="yearly">Yearly</option>

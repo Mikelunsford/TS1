@@ -18,11 +18,14 @@ const UpsertResponse = z.object({
 });
 const BulkResponse = z.object({ applied: z.number().int() });
 
+// R-W11-NUMBERING-01 — field names mirror the prod `numbering_sequences`
+// columns (doc_type / pad_width / reset_period). The legacy `kind` / `pad` /
+// `auto_reset` shape never matched what migration 0034 shipped.
 const NumberingItem = z.object({
-  kind: z.string(),
+  doc_type: z.string(),
   prefix: z.string().nullable().optional(),
-  pad: z.number().int().nullable().optional(),
-  auto_reset: z.string().nullable().optional(),
+  pad_width: z.number().int().nullable().optional(),
+  reset_period: z.enum(['never', 'yearly', 'monthly']).nullable().optional(),
   current_value: z.number().int().nullable().optional(),
   created_at: z.string().nullable().optional(),
   updated_at: z.string().nullable().optional(),
@@ -88,11 +91,11 @@ export async function listNumbering(): Promise<NumberingRow[]> {
 }
 
 export async function updateNumbering(
-  kind: string,
-  patch: { prefix?: string; pad?: number; auto_reset?: 'never' | 'yearly' | 'monthly' },
+  docType: string,
+  patch: { prefix?: string; pad_width?: number; reset_period?: 'never' | 'yearly' | 'monthly' },
 ) {
   return apiRequest({
-    path: `/settings-api/settings/numbering/${encodeURIComponent(kind)}`,
+    path: `/settings-api/settings/numbering/${encodeURIComponent(docType)}`,
     method: 'PUT',
     body: patch,
     schema: NumberingItem,

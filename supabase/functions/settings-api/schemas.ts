@@ -21,8 +21,11 @@ export const SettingsBulkSchema = z.object({
   items: z.array(SettingsBulkItemSchema).min(1).max(200),
 });
 
+// R-W11-NUMBERING-01 — field names mirror the prod numbering_sequences columns
+// (pad_width / reset_period), NOT the original Phase-15 dispatch's pad/auto_reset
+// shape which never matched what migration 0034 actually shipped.
 export const NumberingPutSchema = z.object({
   prefix: z.string().max(16).optional(),
-  pad: z.number().int().min(0).max(12).optional(),
-  auto_reset: z.enum(['never', 'yearly', 'monthly']).optional(),
-});
+  pad_width: z.number().int().min(0).max(12).optional(),
+  reset_period: z.enum(['never', 'yearly', 'monthly']).optional(),
+}).strict();
