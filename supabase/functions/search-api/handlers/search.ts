@@ -1,23 +1,30 @@
 /**
  * GET /search?q=<query>&types=customer,vendor,invoice&limit=20
  *
- * Federated search across the headline entities. v1 uses ILIKE; future
- * upgrade path is pg_trgm + GIN or tsvector. Per-type cap of 5 keeps the
- * response bounded; global cap is `limit` (default 20, max 50).
+ * Federated search across the headline entities.
  *
- * Each result row:
+ * ─── Wave 11B (Sub-agent B) — Closes R-W10-SEARCH-01 ─────────────────────────
+ * Pre-Wave-11: every entity hit Postgres via a separate `.from(t).or(col.ilike.%q%)`
+ *   round trip — Seq Scan once the table grew past a few hundred rows.
+ *
+ * Post-Wave-11: 10 of the entities (the headline set) are answered by a
+ *   single SECURITY DEFINER RPC `federated_search`, which uses pg_trgm-backed
+ *   ILIKE + similarity() ranking. Migration 0073 adds the GIN(trgm) indexes
+ *   and the RPC.
+ *
+ * The remaining 4 entity types (payment / credit_note / purchase_order /
+ *   journal_entry) keep the v1 ILIKE path because they were NOT in scope for
+ *   R-W10-SEARCH-01. Future wave: extend `federated_search` to cover them.
+ *
+ * Each result row (same wire-envelope shape as v1):
  *   { type, id, display_name, snippet, url_path, org_id }
  *
  * Capability: `search.global`.
- *
- * NOTE: this handler is intentionally simple — each entity hits its own
- * SELECT with `.eq('org_id', caller.orgId)` (Pattern A defense-in-depth).
- * For >10 entities we'd consolidate into a single UNION view in a future
- * migration; v1 is straight-line for legibility.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import type { Ctx } from '../../_shared/route.ts';
-import { ok, err, ApiError, fromApiError } from '../../_shared/responses.ts';
+import { ok, ApiError, fromApiError } from '../../_shared/responses.ts';
 import { requireCaller } from '../../_shared/tenant.ts';
 import { admin, requireCap, type Caller } from '../../_shared/handler-helpers.ts';
 
@@ -30,7 +37,7 @@ interface SearchHit {
   org_id: string;
 }
 
-const ENTITY_TYPES = [
+const RPC_ENTITY_TYPES = [
   'customer',
   'vendor',
   'lead',
@@ -38,18 +45,25 @@ const ENTITY_TYPES = [
   'quote',
   'project',
   'invoice',
+  'item',
+  'vendor_bill',
+  'expense',
+] as const;
+type RpcEntityType = (typeof RPC_ENTITY_TYPES)[number];
+
+const FALLBACK_ENTITY_TYPES = [
   'payment',
   'credit_note',
-  'expense',
-  'vendor_bill',
   'purchase_order',
-  'item',
   'journal_entry',
 ] as const;
+type FallbackEntityType = (typeof FALLBACK_ENTITY_TYPES)[number];
+
+const ENTITY_TYPES = [...RPC_ENTITY_TYPES, ...FALLBACK_ENTITY_TYPES] as const;
 type EntityType = (typeof ENTITY_TYPES)[number];
 
 function escapeLike(q: string): string {
-  // Postgres ILIKE wildcards: % and _. We escape user input so it's literal.
+  // Postgres ILIKE wildcards: % and _. Escape user input so it's literal.
   return q.replace(/[\\%_]/g, (m) => '\\' + m);
 }
 
@@ -81,10 +95,31 @@ export async function globalSearch({ req, url }: Ctx): Promise<Response> {
 
     const results: SearchHit[] = [];
 
-    for (const type of types) {
-      const hits = await searchOne(caller, type, ilike, perType);
-      for (const h of hits) results.push(h);
-      if (results.length >= limit) break;
+    // ── Path 1: federated_search RPC (single round trip; ranked by similarity()).
+    const rpcTypes = types.filter((t): t is RpcEntityType =>
+      (RPC_ENTITY_TYPES as readonly string[]).includes(t),
+    );
+    if (rpcTypes.length > 0) {
+      const rpcHits = await searchViaRpc(caller, q, rpcTypes, perType);
+      for (const h of rpcHits) {
+        results.push(h);
+        if (results.length >= limit) break;
+      }
+    }
+
+    // ── Path 2: legacy ILIKE for the 4 entities not yet in the RPC.
+    if (results.length < limit) {
+      const fallbackTypes = types.filter((t): t is FallbackEntityType =>
+        (FALLBACK_ENTITY_TYPES as readonly string[]).includes(t),
+      );
+      for (const type of fallbackTypes) {
+        const hits = await searchOne(caller, type, ilike, perType);
+        for (const h of hits) {
+          results.push(h);
+          if (results.length >= limit) break;
+        }
+        if (results.length >= limit) break;
+      }
     }
 
     return ok({ items: results.slice(0, limit), q, types }, undefined, { req });
@@ -94,9 +129,52 @@ export async function globalSearch({ req, url }: Ctx): Promise<Response> {
   }
 }
 
+/**
+ * Wave 11B: federated_search RPC (migration 0073). One round trip, ranked
+ * by similarity() DESC inside Postgres. SECURITY DEFINER on the RPC re-applies
+ * `org_id = p_org_id` per entity — defense in depth.
+ */
+async function searchViaRpc(
+  caller: Caller,
+  q: string,
+  types: readonly RpcEntityType[],
+  perType: number,
+): Promise<SearchHit[]> {
+  const db = admin();
+  const { data, error } = await db.rpc('federated_search', {
+    p_org_id: caller.orgId,
+    p_q: q,
+    p_types: [...types],
+    p_per_type: perType,
+  });
+  if (error) {
+    // Best-effort: log + fall through to empty so the partial result still ships.
+    console.error('[search-api] federated_search RPC failed', error.message);
+    return [];
+  }
+  const rows = (data ?? []) as Array<{
+    type: string;
+    id: string;
+    display_name: string | null;
+    snippet: string | null;
+    url_path: string;
+    org_id: string;
+    score: number | null;
+  }>;
+  return rows.map((r) => ({
+    type: r.type,
+    id: r.id,
+    display_name: r.display_name ?? '(unnamed)',
+    snippet: r.snippet ?? null,
+    url_path: r.url_path,
+    org_id: r.org_id,
+  }));
+}
+
+/** Legacy single-entity ILIKE fallback for entity types not covered by the RPC. */
 async function searchOne(
   caller: Caller,
-  type: EntityType,
+  type: FallbackEntityType,
   ilike: string,
   perType: number,
 ): Promise<SearchHit[]> {
@@ -104,122 +182,6 @@ async function searchOne(
   const orgId = caller.orgId;
 
   switch (type) {
-    case 'customer': {
-      const { data } = await db
-        .from('customers')
-        .select('id, org_id, display_name, email, phone')
-        .eq('org_id', orgId)
-        .or(`display_name.ilike.${ilike},email.ilike.${ilike},phone.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'customer',
-        id: r.id as string,
-        display_name: (r.display_name as string) ?? '(unnamed)',
-        snippet: (r.email as string) ?? (r.phone as string) ?? null,
-        url_path: `/crm/customers/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'vendor': {
-      const { data } = await db
-        .from('vendors')
-        .select('id, org_id, name, email')
-        .eq('org_id', orgId)
-        .or(`name.ilike.${ilike},email.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'vendor',
-        id: r.id as string,
-        display_name: (r.name as string) ?? '(unnamed)',
-        snippet: (r.email as string) ?? null,
-        url_path: `/vendors/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'lead': {
-      const { data } = await db
-        .from('leads')
-        .select('id, org_id, display_name, company_name, email')
-        .eq('org_id', orgId)
-        .or(
-          `display_name.ilike.${ilike},company_name.ilike.${ilike},email.ilike.${ilike}`,
-        )
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'lead',
-        id: r.id as string,
-        display_name: (r.display_name as string) ?? '(unnamed)',
-        snippet: (r.company_name as string) ?? (r.email as string) ?? null,
-        url_path: `/crm/leads/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'opportunity': {
-      const { data } = await db
-        .from('opportunities')
-        .select('id, org_id, name, stage')
-        .eq('org_id', orgId)
-        .ilike('name', ilike)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'opportunity',
-        id: r.id as string,
-        display_name: (r.name as string) ?? '(unnamed)',
-        snippet: (r.stage as string) ?? null,
-        url_path: `/crm/opportunities/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'quote': {
-      const { data } = await db
-        .from('quotes')
-        .select('id, org_id, quote_number, customer_name, status')
-        .eq('org_id', orgId)
-        .or(`quote_number.ilike.${ilike},customer_name.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'quote',
-        id: r.id as string,
-        display_name: (r.quote_number as string) ?? '(unnamed)',
-        snippet: `${r.customer_name ?? ''} · ${r.status ?? ''}`.trim(),
-        url_path: `/quotes/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'project': {
-      const { data } = await db
-        .from('projects')
-        .select('id, org_id, project_number, customer_name, state')
-        .eq('org_id', orgId)
-        .or(`project_number.ilike.${ilike},customer_name.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'project',
-        id: r.id as string,
-        display_name: (r.project_number as string) ?? '(unnamed)',
-        snippet: `${r.customer_name ?? ''} · ${r.state ?? ''}`.trim(),
-        url_path: `/projects/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'invoice': {
-      const { data } = await db
-        .from('invoices')
-        .select('id, org_id, invoice_number, customer_name_snapshot, status')
-        .eq('org_id', orgId)
-        .or(
-          `invoice_number.ilike.${ilike},customer_name_snapshot.ilike.${ilike}`,
-        )
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'invoice',
-        id: r.id as string,
-        display_name: (r.invoice_number as string) ?? '(unnamed)',
-        snippet: `${r.customer_name_snapshot ?? ''} · ${r.status ?? ''}`.trim(),
-        url_path: `/invoicing/invoices/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
     case 'payment': {
       const { data } = await db
         .from('payments')
@@ -254,40 +216,6 @@ async function searchOne(
         org_id: r.org_id as string,
       }));
     }
-    case 'expense': {
-      const { data } = await db
-        .from('expenses')
-        .select('id, org_id, expense_number, description, status')
-        .eq('org_id', orgId)
-        .or(`expense_number.ilike.${ilike},description.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'expense',
-        id: r.id as string,
-        display_name: (r.expense_number as string) ?? '(unnamed)',
-        snippet: `${r.description ?? ''} · ${r.status ?? ''}`.trim(),
-        url_path: `/finance/expenses/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'vendor_bill': {
-      const { data } = await db
-        .from('vendor_bills')
-        .select('id, org_id, bill_number, vendor_invoice_number, status')
-        .eq('org_id', orgId)
-        .or(
-          `bill_number.ilike.${ilike},vendor_invoice_number.ilike.${ilike}`,
-        )
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'vendor_bill',
-        id: r.id as string,
-        display_name: (r.bill_number as string) ?? '(unnamed)',
-        snippet: (r.vendor_invoice_number as string) ?? (r.status as string) ?? null,
-        url_path: `/vendors/bills/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
     case 'purchase_order': {
       const { data } = await db
         .from('purchase_orders')
@@ -301,22 +229,6 @@ async function searchOne(
         display_name: (r.po_number as string) ?? '(unnamed)',
         snippet: (r.status as string) ?? null,
         url_path: `/vendors/purchase-orders/${r.id}`,
-        org_id: r.org_id as string,
-      }));
-    }
-    case 'item': {
-      const { data } = await db
-        .from('items')
-        .select('id, org_id, sku, name')
-        .eq('org_id', orgId)
-        .or(`sku.ilike.${ilike},name.ilike.${ilike}`)
-        .limit(perType);
-      return (data ?? []).map((r) => ({
-        type: 'item',
-        id: r.id as string,
-        display_name: (r.name as string) ?? (r.sku as string) ?? '(unnamed)',
-        snippet: (r.sku as string) ?? null,
-        url_path: `/inventory/items/${r.id}`,
         org_id: r.org_id as string,
       }));
     }

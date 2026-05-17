@@ -34,6 +34,12 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For opportunities: stage transitions write audit_log via fn_opportunities_audit_stage
+// (migration 0047). The PUT /stage handler is intentionally NOT instrumented here.
 
 const OPP_COLS =
   'id, org_id, opportunity_number, customer_id, lead_id, name, stage, ' +
@@ -192,7 +198,17 @@ export async function createOpportunity({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToOpportunity(data as OpportunityRow) } };
+        const opp = rowToOpportunity(data as OpportunityRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'opportunity',
+          entity_id: opp.id,
+          action: 'create',
+          after: opp as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: opp } };
       },
     );
   } catch (e) {
@@ -215,7 +231,7 @@ export async function patchOpportunity({ req, params }: Ctx): Promise<Response> 
       'PATCH /opportunities/:id',
       body,
       async () => {
-        await fetchOpportunityRow(caller, id);
+        const beforeRow = await fetchOpportunityRow(caller, id);
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.display_name !== undefined) patch.name = body.display_name;
         if (body.stage !== undefined) patch.stage = body.stage;
@@ -239,7 +255,21 @@ export async function patchOpportunity({ req, params }: Ctx): Promise<Response> 
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToOpportunity(data as OpportunityRow) } };
+        const after = rowToOpportunity(data as OpportunityRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        // Stage transitions on this PATCH path are ALSO audited by the DB trigger
+        // fn_opportunities_audit_stage (mig 0047); the application-level row here
+        // covers non-stage field edits (name, amount, probability, owner, etc.).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'opportunity',
+          entity_id: id,
+          action: 'update',
+          before: rowToOpportunity(beforeRow) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {

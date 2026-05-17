@@ -44,6 +44,12 @@ import {
   type Caller,
 } from '../../_shared/handler-helpers.ts';
 import { getNextDocNumber, NumberingError } from '../../_shared/numbering.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// For projects: close/reopen flip status + stamp shipping_completed_at and
+// are covered by the state trigger. We instrument create + non-state PATCH.
 
 const PROJECT_COLS =
   'id, org_id, project_number, quote_id, customer_id, customer_name, name, status, ' +
@@ -222,7 +228,17 @@ export async function createProject({ req }: Ctx): Promise<Response> {
           detail: error?.message,
         });
       }
-      return { status: 201, body: { data: rowToProject(data as ProjectRow) } };
+      const project = rowToProject(data as ProjectRow);
+      // Phase 17 step-8: audit_log write (Wave 11B sweep).
+      await writeAudit({
+        actor_user_id: caller.userId,
+        org_id: caller.orgId,
+        entity_type: 'project',
+        entity_id: project.id,
+        action: 'create',
+        after: project as unknown as Record<string, unknown>,
+      });
+      return { status: 201, body: { data: project } };
     });
   } catch (e) {
     if (e instanceof ApiError) return fromApiError(e, req);
@@ -241,7 +257,7 @@ export async function patchProject({ req, params }: Ctx): Promise<Response> {
     const id = params.id;
 
     return await respondWithIdempotency(req, caller, 'PATCH /projects/:id', body, async () => {
-      await fetchProjectRow(caller, id);
+      const beforeRow = await fetchProjectRow(caller, id);
       const patch: Record<string, unknown> = {
         updated_by: caller.userId,
         updated_at: new Date().toISOString(),
@@ -267,7 +283,18 @@ export async function patchProject({ req, params }: Ctx): Promise<Response> {
           detail: error?.message,
         });
       }
-      return { status: 200, body: { data: rowToProject(data as ProjectRow) } };
+      const after = rowToProject(data as ProjectRow);
+      // Phase 17 step-8: audit_log write (Wave 11B sweep — non-state edit).
+      await writeAudit({
+        actor_user_id: caller.userId,
+        org_id: caller.orgId,
+        entity_type: 'project',
+        entity_id: id,
+        action: 'update',
+        before: rowToProject(beforeRow) as unknown as Record<string, unknown>,
+        after: after as unknown as Record<string, unknown>,
+      });
+      return { status: 200, body: { data: after } };
     });
   } catch (e) {
     if (e instanceof ApiError) return fromApiError(e, req);

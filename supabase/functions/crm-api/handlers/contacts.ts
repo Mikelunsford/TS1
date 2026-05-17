@@ -25,6 +25,10 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
 
 const CONTACT_COLS =
   'id, org_id, customer_id, first_name, last_name, email, phone, title, ' +
@@ -152,7 +156,17 @@ export async function createContact({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToContact(data as ContactRow) } };
+        const contact = rowToContact(data as ContactRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'contact',
+          entity_id: contact.id,
+          action: 'create',
+          after: contact as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: contact } };
       },
     );
   } catch (e) {
@@ -175,7 +189,7 @@ export async function patchContact({ req, params }: Ctx): Promise<Response> {
       'PATCH /contacts/:id',
       body,
       async () => {
-        await fetchContactRow(caller, id);
+        const beforeRow = await fetchContactRow(caller, id);
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.first_name !== undefined) patch.first_name = body.first_name;
         if (body.last_name !== undefined) patch.last_name = body.last_name ?? '';
@@ -196,7 +210,18 @@ export async function patchContact({ req, params }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToContact(data as ContactRow) } };
+        const after = rowToContact(data as ContactRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'contact',
+          entity_id: id,
+          action: 'update',
+          before: rowToContact(beforeRow) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {
@@ -218,7 +243,7 @@ export async function deleteContact({ req, params }: Ctx): Promise<Response> {
       'DELETE /contacts/:id',
       { id },
       async () => {
-        await fetchContactRow(caller, id);
+        const beforeRow = await fetchContactRow(caller, id);
         // Contract §3.2 specifies hard delete (cascades nothing).
         const { error } = await admin()
           .from('contacts')
@@ -230,6 +255,15 @@ export async function deleteContact({ req, params }: Ctx): Promise<Response> {
             detail: error.message,
           });
         }
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'contact',
+          entity_id: id,
+          action: 'soft_delete',
+          before: rowToContact(beforeRow) as unknown as Record<string, unknown>,
+        });
         return { status: 200, body: { data: { ok: true } } };
       },
     );

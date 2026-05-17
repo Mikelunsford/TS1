@@ -33,6 +33,11 @@ import {
   respondWithIdempotency,
   type Caller,
 } from '../_helpers.ts';
+import { writeAudit } from '../../_shared/audit.ts';
+
+// ─── Wave 11B audit sweep — Sub-agent B owns this block (R-W10-AUDIT-01). ───
+// Skip state-change paths — DB triggers handle those (0041/0047/0058/0060).
+// items has no state machine — all routes are non-state CRUD.
 
 const ITEM_COLS =
   'id, org_id, item_code, description, category, category_id, item_kind, ' +
@@ -171,7 +176,17 @@ export async function createItem({ req }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 201, body: { data: rowToItem(data as ItemRow) } };
+        const item = rowToItem(data as ItemRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'item',
+          entity_id: item.id,
+          action: 'create',
+          after: item as unknown as Record<string, unknown>,
+        });
+        return { status: 201, body: { data: item } };
       },
     );
   } catch (e) {
@@ -194,7 +209,7 @@ export async function patchItem({ req, params }: Ctx): Promise<Response> {
       'PATCH /items/:id',
       body,
       async () => {
-        await fetchItemRow(caller, id);
+        const beforeRow = await fetchItemRow(caller, id);
         const patch: Record<string, unknown> = { updated_by: caller.userId };
         if (body.item_code !== undefined) patch.item_code = body.item_code;
         if (body.description !== undefined) patch.description = body.description;
@@ -226,7 +241,18 @@ export async function patchItem({ req, params }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
-        return { status: 200, body: { data: rowToItem(data as ItemRow) } };
+        const after = rowToItem(data as ItemRow);
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'item',
+          entity_id: id,
+          action: 'update',
+          before: rowToItem(beforeRow) as unknown as Record<string, unknown>,
+          after: after as unknown as Record<string, unknown>,
+        });
+        return { status: 200, body: { data: after } };
       },
     );
   } catch (e) {
@@ -265,6 +291,15 @@ export async function archiveItem({ req, params }: Ctx): Promise<Response> {
             detail: error?.message,
           });
         }
+        // Phase 17 step-8: audit_log write (Wave 11B sweep).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: caller.orgId,
+          entity_type: 'item',
+          entity_id: id,
+          action: 'soft_delete',
+          after: { is_active: false, deleted_at: new Date().toISOString() },
+        });
         return { status: 200, body: { data: rowToItem(data as ItemRow) } };
       },
     );
