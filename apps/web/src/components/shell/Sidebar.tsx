@@ -423,24 +423,27 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
         />
       )}
 
-      {/* Desktop rail (md+) — fixed width, in-flow. */}
+      {/* Desktop rail (md+) — fixed width, in-flow, own scrollbar so an
+          expanded category (e.g. Settings with 11 children) doesn't get
+          clipped by the AppShell's outer `overflow-hidden`. */}
       <nav
-        className="hidden w-56 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4 md:flex"
+        className="hidden w-56 flex-col gap-1 overflow-y-auto border-r border-border bg-bg-muted px-3 py-4 md:flex"
         aria-label="Primary"
       >
         {navContent}
       </nav>
 
-      {/* Mobile drawer (< md) — overlays content, slides in from left. */}
+      {/* Mobile drawer (< md) — overlays content, slides in from left.
+          Close button stays pinned at the top while nav content scrolls. */}
       <nav
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4 shadow-xl transition-transform duration-200 md:hidden',
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-bg-muted shadow-xl transition-transform duration-200 md:hidden',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
         aria-label="Primary navigation"
         aria-hidden={!mobileOpen}
       >
-        <div className="mb-2 flex items-center justify-end">
+        <div className="flex items-center justify-end px-3 pt-4">
           <button
             type="button"
             onClick={onClose}
@@ -450,7 +453,9 @@ export function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
             <X className="h-4 w-4" />
           </button>
         </div>
-        {navContent}
+        <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-4 pt-2">
+          {navContent}
+        </div>
       </nav>
     </>
   );
