@@ -78,8 +78,7 @@ END
 $function$;
 
 COMMENT ON FUNCTION public.seed_org_defaults(uuid) IS
-  'Idempotent per-org seed: numbering + settings + COA + warehouse. Each step ' ||
-  'guards on org-scoped existence so re-runs on the same org are safe (Wave 11C).';
+  'Idempotent per-org seed: numbering + settings + COA + warehouse. Each step guards on org-scoped existence so re-runs on the same org are safe (Wave 11C).';
 
 -- ─── Part B: BEFORE INSERT/UPDATE trigger on journal_entries ──────────────────
 
@@ -116,10 +115,7 @@ END
 $function$;
 
 COMMENT ON FUNCTION public.tg_je_reject_closed_period() IS
-  'BEFORE INSERT/UPDATE trigger: rejects journal_entries whose entry_date ' ||
-  'falls inside a closed period for the same org. Raises SQLSTATE P0001 ' ||
-  'with message prefix "period_closed:" so the finance-api JE handler can ' ||
-  'map to a 422 PERIOD_CLOSED envelope (Wave 11C, closes R-W8E-OBS-04).';
+  'BEFORE INSERT/UPDATE trigger: rejects journal_entries whose entry_date falls inside a closed period for the same org. Raises SQLSTATE P0001 with message prefix "period_closed:" so the finance-api JE handler can map to a 422 PERIOD_CLOSED envelope (Wave 11C, closes R-W8E-OBS-04).';
 
 DROP TRIGGER IF EXISTS tg_journal_entries_reject_closed_period ON public.journal_entries;
 CREATE TRIGGER tg_journal_entries_reject_closed_period
