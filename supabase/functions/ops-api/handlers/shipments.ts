@@ -30,14 +30,17 @@ import {
   ShipmentCreateSchema,
   ShipmentPatchSchema,
   ShipmentSchema,
+  type ProjectMini,
   type Shipment,
 } from '../../_shared/types.ts';
 import { assertTransition, WorkflowError } from '../../_shared/workflow.ts';
 import {
   admin,
   decodeCursor,
+  fetchProjectMiniMap,
   paginate,
   parseBody,
+  parseExpand,
   parseLimit,
   requireCap,
   respondWithIdempotency,
@@ -70,8 +73,8 @@ interface ShRow {
   updated_at: string;
 }
 
-function rowToSh(row: ShRow): Shipment {
-  return ShipmentSchema.parse(row);
+function rowToSh(row: ShRow, project?: ProjectMini | null): Shipment {
+  return ShipmentSchema.parse({ ...row, project: project ?? undefined });
 }
 
 // ================================================================ GET /shipments
@@ -106,7 +109,21 @@ export async function listShipments({ req, url }: Ctx): Promise<Response> {
   }
   const rows = (data ?? []) as ShRow[];
   const { items, next_cursor } = paginate(rows, limit);
-  return ok({ items: items.map(rowToSh), next_cursor }, undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when ?expand=project.
+  const expand = parseExpand(url);
+  const projectMap = expand.has('project')
+    ? await fetchProjectMiniMap(caller, [...new Set(items.map((r) => r.project_id))])
+    : null;
+
+  return ok(
+    {
+      items: items.map((r) => rowToSh(r, projectMap?.get(r.project_id) ?? null)),
+      next_cursor,
+    },
+    undefined,
+    { req },
+  );
 }
 
 // =============================================================== POST /shipments
@@ -168,11 +185,18 @@ export async function createShipment({ req }: Ctx): Promise<Response> {
 }
 
 // =========================================================== GET /shipments/:id
-export async function getShipment({ req, params }: Ctx): Promise<Response> {
+export async function getShipment({ req, url, params }: Ctx): Promise<Response> {
   const caller = requireCaller(req);
   requireCap(caller, 'shipping.read');
   const row = await fetchShRow(caller, params.id);
-  return ok(rowToSh(row), undefined, { req });
+
+  // R-W8F-OBS-03 — embed project mini when ?expand=project.
+  const expand = parseExpand(url);
+  const project = expand.has('project')
+    ? (await fetchProjectMiniMap(caller, [row.project_id])).get(row.project_id) ?? null
+    : undefined;
+
+  return ok(rowToSh(row, project), undefined, { req });
 }
 
 // ========================================================= PATCH /shipments/:id

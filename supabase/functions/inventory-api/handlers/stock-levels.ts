@@ -18,12 +18,15 @@ import { ok, ApiError } from '../../_shared/responses.ts';
 import { requireCaller } from '../../_shared/tenant.ts';
 import {
   StockLevelSchema,
+  type ItemMini,
   type StockLevel,
 } from '../../_shared/types.ts';
 import {
   admin,
   decodeCursor,
+  fetchItemMiniMap,
   paginate,
+  parseExpand,
   parseLimit,
   requireCap,
 } from '../_helpers.ts';
@@ -45,8 +48,8 @@ interface StockLevelRow {
   updated_at: string;
 }
 
-function rowToStockLevel(row: StockLevelRow): StockLevel {
-  return StockLevelSchema.parse(row);
+function rowToStockLevel(row: StockLevelRow, item?: ItemMini | null): StockLevel {
+  return StockLevelSchema.parse({ ...row, item: item ?? undefined });
 }
 
 // ============================================================= GET /stock-levels
@@ -86,7 +89,21 @@ export async function listStockLevels({ req, url }: Ctx): Promise<Response> {
   }
   const rows = (data ?? []) as StockLevelRow[];
   const { items, next_cursor } = paginate(rows, limit);
-  return ok({ items: items.map(rowToStockLevel), next_cursor }, undefined, { req });
+
+  // R-W8F-OBS-02 — embed item mini when requested. Batch over the visible page only.
+  const expand = parseExpand(url);
+  const itemMap = expand.has('item')
+    ? await fetchItemMiniMap(caller, [...new Set(items.map((r) => r.item_id))])
+    : null;
+
+  return ok(
+    {
+      items: items.map((r) => rowToStockLevel(r, itemMap?.get(r.item_id) ?? null)),
+      next_cursor,
+    },
+    undefined,
+    { req },
+  );
 }
 
 // ============================================ GET /stock-levels/by-item-warehouse
@@ -109,6 +126,11 @@ export async function getStockLevelByItemWarehouse({ req, url }: Ctx): Promise<R
   if (error) {
     throw new ApiError('INTERNAL_ERROR', 'stock_levels lookup failed', 500, { detail: error.message });
   }
+  const expand = parseExpand(url);
+  const item = expand.has('item')
+    ? (await fetchItemMiniMap(caller, [itemId])).get(itemId) ?? null
+    : undefined;
+
   if (!data) {
     // Zero-stock view: return a synthetic 0/0/0 row instead of 404 so the SPA
     // doesn't have to special-case "never had stock" vs "currently zero".
@@ -123,7 +145,8 @@ export async function getStockLevelByItemWarehouse({ req, url }: Ctx): Promise<R
       last_counted_at: null,
       created_at: null,
       updated_at: null,
+      ...(expand.has('item') ? { item } : {}),
     }, undefined, { req });
   }
-  return ok(rowToStockLevel(data as StockLevelRow), undefined, { req });
+  return ok(rowToStockLevel(data as StockLevelRow, item), undefined, { req });
 }

@@ -51,10 +51,15 @@ export function listProductionRuns(filters?: ProductionRunListFilters) {
   });
 }
 
-export function getProductionRun(id: string): Promise<ProductionRun> {
+// R-W8F-OBS-03 — pass `expand: ['project']` to populate `run.project` on response.
+export function getProductionRun(
+  id: string,
+  opts?: { expand?: ReadonlyArray<'project'> },
+): Promise<ProductionRun> {
+  const qs = opts?.expand?.length ? `?expand=${opts.expand.join(',')}` : '';
   return apiRequest({
     method: 'GET',
-    path: `/ops-api/production-runs/${id}`,
+    path: `/ops-api/production-runs/${id}${qs}`,
     schema: ProductionRunSchema,
   });
 }

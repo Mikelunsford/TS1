@@ -37,6 +37,13 @@ describe('stockService routing', () => {
     expect(path).toContain('low_stock=true');
   });
 
+  // R-W8F-OBS-02 — expand pass-through.
+  it('listStockLevels routes expand=item into the query', () => {
+    void listStockLevels({ expand: ['item'] });
+    const path = mock.mock.calls[0]?.[0]?.path ?? '';
+    expect(path).toContain('expand=item');
+  });
+
   it('listStockMovements routes filters into the query', () => {
     void listStockMovements({
       warehouse_id: 'wh1',

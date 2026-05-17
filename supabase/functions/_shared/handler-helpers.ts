@@ -30,7 +30,13 @@ import { ApiError } from './responses.ts';
 import { withIdempotency } from './idempotency.ts';
 import { createAdminClient, type SupabaseClient } from './supabase-admin.ts';
 import { can, type Capability } from './capabilities.ts';
-import type { Role } from './types.ts';
+import {
+  ItemMiniSchema,
+  ProjectMiniSchema,
+  type ItemMini,
+  type ProjectMini,
+  type Role,
+} from './types.ts';
 
 export interface Caller {
   userId: string;
@@ -73,6 +79,20 @@ export function parseLimit(url: URL): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1) return 50;
   return Math.min(n, 200);
+}
+
+// R-W8F-OBS-02/03 — parse ?expand=item,project (repeatable param OR comma-list).
+// Returns a Set the handler can membership-check. Unknown keys are kept as-is;
+// handlers ignore expand keys they don't recognize, so callers can't break us.
+export function parseExpand(url: URL): Set<string> {
+  const out = new Set<string>();
+  for (const raw of url.searchParams.getAll('expand')) {
+    for (const part of raw.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed) out.add(trimmed);
+    }
+  }
+  return out;
 }
 
 export function encodeCursor(p: CursorPayload): string {
@@ -167,4 +187,48 @@ export function admin(): SupabaseClient {
 export function requireCap(caller: Caller, cap: Capability): void {
   if (can(caller.role, cap)) return;
   throw new ApiError('FORBIDDEN', `caller lacks capability: ${cap}`, 403);
+}
+
+// R-W8F-OBS-02/03 — batch-fetch mini projections for ?expand= embeds. Tenancy-
+// scoped via .eq('org_id', caller.orgId); unknown ids are silently dropped
+// (caller gets `null` for those slots) so a cross-tenant probe via expand can't
+// leak rows the caller couldn't read directly.
+
+const ITEM_MINI_COLS = 'id, item_code, description, item_kind';
+const PROJECT_MINI_COLS = 'id, project_number, name, status';
+
+export async function fetchItemMiniMap(caller: Caller, ids: string[]): Promise<Map<string, ItemMini>> {
+  const map = new Map<string, ItemMini>();
+  if (ids.length === 0) return map;
+  const { data, error } = await admin()
+    .from('items')
+    .select(ITEM_MINI_COLS)
+    .eq('org_id', caller.orgId)
+    .in('id', ids);
+  if (error) {
+    throw new ApiError('INTERNAL_ERROR', 'items expand lookup failed', 500, { detail: error.message });
+  }
+  for (const row of data ?? []) {
+    const parsed = ItemMiniSchema.parse(row);
+    map.set(parsed.id, parsed);
+  }
+  return map;
+}
+
+export async function fetchProjectMiniMap(caller: Caller, ids: string[]): Promise<Map<string, ProjectMini>> {
+  const map = new Map<string, ProjectMini>();
+  if (ids.length === 0) return map;
+  const { data, error } = await admin()
+    .from('projects')
+    .select(PROJECT_MINI_COLS)
+    .eq('org_id', caller.orgId)
+    .in('id', ids);
+  if (error) {
+    throw new ApiError('INTERNAL_ERROR', 'projects expand lookup failed', 500, { detail: error.message });
+  }
+  for (const row of data ?? []) {
+    const parsed = ProjectMiniSchema.parse(row);
+    map.set(parsed.id, parsed);
+  }
+  return map;
 }

@@ -31,7 +31,7 @@ export default function ShipmentDetailPage() {
 
   const query = useQuery({
     queryKey: shipmentKeys.detail(id ?? ''),
-    queryFn: () => getShipment(id!),
+    queryFn: () => getShipment(id!, { expand: ['project'] }),
     enabled: Boolean(id),
   });
 
@@ -140,7 +140,16 @@ export default function ShipmentDetailPage() {
       <section className="rounded-md border border-border bg-bg p-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <dt className="text-fg-muted">Project</dt>
-          <dd className="font-mono text-xs">{s.project_id.slice(0, 8)}…</dd>
+          <dd>
+            {s.project ? (
+              <span>
+                <span className="font-mono text-xs text-fg-muted">{s.project.project_number}</span>
+                <span className="ml-2">{s.project.name}</span>
+              </span>
+            ) : (
+              <span className="font-mono text-xs text-fg-muted">{s.project_id.slice(0, 8)}…</span>
+            )}
+          </dd>
           <dt className="text-fg-muted">Qty shipped</dt>
           <dd className="text-right font-mono">{String(s.qty_shipped)}</dd>
           <dt className="text-fg-muted">Carrier</dt>

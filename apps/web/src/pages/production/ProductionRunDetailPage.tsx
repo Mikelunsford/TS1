@@ -28,7 +28,7 @@ export default function ProductionRunDetailPage() {
 
   const query = useQuery({
     queryKey: productionRunKeys.detail(id ?? ''),
-    queryFn: () => getProductionRun(id!),
+    queryFn: () => getProductionRun(id!, { expand: ['project'] }),
     enabled: Boolean(id),
   });
 
@@ -95,7 +95,16 @@ export default function ProductionRunDetailPage() {
       <section className="rounded-md border border-border bg-bg p-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <dt className="text-fg-muted">Project</dt>
-          <dd className="font-mono text-xs">{run.project_id.slice(0, 8)}…</dd>
+          <dd>
+            {run.project ? (
+              <span>
+                <span className="font-mono text-xs text-fg-muted">{run.project.project_number}</span>
+                <span className="ml-2">{run.project.name}</span>
+              </span>
+            ) : (
+              <span className="font-mono text-xs text-fg-muted">{run.project_id.slice(0, 8)}…</span>
+            )}
+          </dd>
           <dt className="text-fg-muted">Target qty</dt>
           <dd className="text-right font-mono">{String(run.qty_target)}</dd>
           <dt className="text-fg-muted">Scheduled for</dt>

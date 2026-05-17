@@ -37,6 +37,9 @@ export interface StockLevelListFilters {
   low_stock?: boolean;
   limit?: number;
   cursor?: string;
+  // R-W8F-OBS-02 — set to ['item'] to populate `level.item` with an ItemMini
+  // (id + item_code + description + item_kind) on every row in the response.
+  expand?: ReadonlyArray<'item'>;
 }
 
 export interface StockMovementListFilters {
@@ -59,6 +62,7 @@ function toLevelQuery(filters: StockLevelListFilters | undefined): string {
   if (filters.low_stock) sp.set('low_stock', 'true');
   if (filters.limit) sp.set('limit', String(filters.limit));
   if (filters.cursor) sp.set('cursor', filters.cursor);
+  if (filters.expand?.length) sp.set('expand', filters.expand.join(','));
   const s = sp.toString();
   return s ? `?${s}` : '';
 }

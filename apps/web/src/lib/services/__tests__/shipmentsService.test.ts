@@ -39,6 +39,12 @@ describe('shipmentsService routing', () => {
     expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/shipments/abc');
   });
 
+  // R-W8F-OBS-03 — expand pass-through.
+  it('getShipment appends ?expand=project when requested', () => {
+    void getShipment('abc', { expand: ['project'] });
+    expect(mock.mock.calls[0]?.[0]?.path).toBe('/ops-api/shipments/abc?expand=project');
+  });
+
   it('createShipment POSTs the body including carrier_name', () => {
     void createShipment({ project_id: 'p1', qty_shipped: 1, carrier_name: 'UPS' });
     const call = mock.mock.calls[0]?.[0];
