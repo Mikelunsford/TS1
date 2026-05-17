@@ -10,16 +10,31 @@
 import { z } from 'zod';
 import { apiRequest } from '../apiClient';
 
-const AdminMeSchema = z.object({
+// R-W11-MFA-TEST-01: /admin/me now returns 200 for non-admins too, with
+// is_platform_admin: false + null grant fields. Discriminated union so
+// downstream code reads `is_platform_admin` and narrows correctly. The
+// `false` branch is what a staff (non-admin) user sees; the `true` branch
+// is what an active platform_admin sees.
+const AdminMeAdminSchema = z.object({
   user_id: z.string().uuid(),
   is_platform_admin: z.literal(true),
   granted_at: z.string(),
   granted_by: z.string().uuid(),
-  // Wave 11 (R-W10-P23-OBS-02) — added so the SPA can route to
-  // /admin/enroll-mfa before the user hits MFA_REQUIRED on a real handler.
+  // Wave 11 (R-W10-P23-OBS-02) — drives /admin/enroll-mfa redirect.
   // Optional for backward compat with stale workers during rollout.
   mfa_verified: z.boolean().optional(),
 });
+const AdminMeNonAdminSchema = z.object({
+  user_id: z.string().uuid(),
+  is_platform_admin: z.literal(false),
+  granted_at: z.null(),
+  granted_by: z.null(),
+  mfa_verified: z.boolean().optional(),
+});
+const AdminMeSchema = z.discriminatedUnion('is_platform_admin', [
+  AdminMeAdminSchema,
+  AdminMeNonAdminSchema,
+]);
 export type AdminMe = z.infer<typeof AdminMeSchema>;
 
 const OrgRowSchema = z.object({

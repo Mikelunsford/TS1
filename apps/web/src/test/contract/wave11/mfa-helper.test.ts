@@ -100,7 +100,11 @@ describe('Wave 11 — platform_admin gate composes platform_admins + MFA', () =>
   // Documentation-style assertion that the gate has two checks in order:
   //   1. platform_admins active row  (FORBIDDEN if missing)
   //   2. verified TOTP factor        (MFA_REQUIRED if missing)
-  // The /admin/me handler opts out of step 2 so enrollment is reachable.
+  // R-W11-MFA-TEST-01: /admin/me no longer goes through requirePlatformAdmin
+  // at all — it calls decodeAdminJwt + does its own platform_admins lookup
+  // with maybeSingle(), returning 200 with is_platform_admin: false (and
+  // mfa_verified: false) when the row is missing. Every other /admin/*
+  // handler still composes both checks in this order.
   it('orders platform_admins before MFA so non-admins never reveal MFA state', () => {
     const steps = ['platform_admins', 'mfa'];
     expect(steps[0]).toBe('platform_admins');
