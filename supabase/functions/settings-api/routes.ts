@@ -26,7 +26,7 @@ export const routes: Route[] = [
   { method: 'GET',  path: '/settings/me/all',         handler: getAllSettingsForMe },
   { method: 'GET',  path: '/settings/me/flags',       handler: getFlagsForMe },
   { method: 'GET',  path: '/settings/numbering',      handler: listNumberingForMe },
-  { method: 'PUT',  path: '/settings/numbering/:kind',handler: updateNumberingForKind },
+  { method: 'PUT',  path: '/settings/numbering/:doc_type', handler: updateNumberingForKind },
   { method: 'GET',  path: '/settings/:group',         handler: listSettingsByGroup },
   { method: 'PUT',  path: '/settings/:group/:key',    handler: upsertSetting },
   { method: 'POST', path: '/settings/bulk-update',    handler: bulkUpdateSettings },
