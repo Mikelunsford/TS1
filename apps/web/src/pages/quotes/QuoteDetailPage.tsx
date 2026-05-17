@@ -364,7 +364,7 @@ export default function QuoteDetailPage() {
       <QuoteActionDialog
         open={dialog === 'send'}
         title="Send quote"
-        description="Records a send event on the quote. Phase 19 wires real email."
+        description="Records a send event on the quote."
         submitLabel="Send"
         fields={[
           {

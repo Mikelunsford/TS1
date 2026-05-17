@@ -41,7 +41,7 @@ export default function SignIn() {
         className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-bg p-6 shadow-sm"
       >
         <header className="space-y-1 text-center">
-          <h1 className="text-xl font-semibold">Team1</h1>
+          <h1 className="text-xl font-semibold">TS1</h1>
           <p className="text-sm text-fg-muted">
             {mode === 'signin' ? 'Sign in to continue' : 'Create an account'}
           </p>

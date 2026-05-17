@@ -63,7 +63,7 @@ export function CustomerOverviewCard({ customer }: { customer: Customer }) {
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-fg-subtle">Outstanding balance</dt>
-          <dd className="font-mono text-fg" title="Filled in Wave 3 when invoicing ships">
+          <dd className="font-mono text-fg">
             {formatMoney(outstandingCents, { currency })}
           </dd>
         </div>

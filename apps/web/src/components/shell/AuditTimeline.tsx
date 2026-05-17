@@ -5,12 +5,6 @@
  * RLS — only org_owner / org_admin / accounting see rows per post-0068
  * `audit_select_staff` policy). Displays reverse-chronological actions with
  * actor + diff.
- *
- * Wiring scope for this PR: demo wiring on InvoiceDetailPage. Session 4
- * portals will wire it on every entity detail page.
- *
- * TODO Session 4: wire into every entity detail page (quotes, projects,
- * customers, vendors, POs, etc).
  */
 
 import { useQuery } from '@tanstack/react-query';

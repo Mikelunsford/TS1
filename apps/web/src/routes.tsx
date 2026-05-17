@@ -202,11 +202,8 @@ export function AppRoutes() {
       <Routes>
         <Route path="/login" element={<SignIn />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        {/* Wave 10 fix — `/` now redirects to /dashboard. PlaceholderHome
-            (the Wave 1 welcome card) was still wired here through Sessions
-            1-4 and rendered stale "Identity & tenancy is live" copy after
-            login. Customer/vendor portal users are intercepted earlier in
-            <ProtectedRoute> and never hit this redirect. */}
+        {/* `/` redirects to /dashboard. Customer/vendor portal users are
+            intercepted earlier in <ProtectedRoute> and never hit this redirect. */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route
           path="/crm"
