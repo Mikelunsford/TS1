@@ -38,12 +38,24 @@ const ProvisionOrgSchema = z.object({
   owner_full_name: z.string().min(1).max(120),
 });
 
-const AdminMe = z.object({
+// R-W11-MFA-TEST-01: /admin/me returns 200 for non-admins (with
+// is_platform_admin: false) instead of 403. Discriminated union mirrors
+// the production schema in adminConsoleService.ts.
+const AdminMeAdmin = z.object({
   user_id: z.string().uuid(),
   is_platform_admin: z.literal(true),
   granted_at: z.string(),
   granted_by: z.string().uuid(),
+  mfa_verified: z.boolean().optional(),
 });
+const AdminMeNonAdmin = z.object({
+  user_id: z.string().uuid(),
+  is_platform_admin: z.literal(false),
+  granted_at: z.null(),
+  granted_by: z.null(),
+  mfa_verified: z.boolean().optional(),
+});
+const AdminMe = z.discriminatedUnion('is_platform_admin', [AdminMeAdmin, AdminMeNonAdmin]);
 
 const OrgRow = z.object({
   id: z.string().uuid(),
@@ -115,7 +127,7 @@ const HistoryList = z.object({
 });
 
 describe('admin-console-api Phase 23 — response shapes', () => {
-  it('parses GET /admin/me', () => {
+  it('parses GET /admin/me (active platform admin branch)', () => {
     const v = AdminMe.parse({
       user_id: '11111111-1111-1111-1111-111111111111',
       is_platform_admin: true,
@@ -123,6 +135,40 @@ describe('admin-console-api Phase 23 — response shapes', () => {
       granted_by: '11111111-1111-1111-1111-111111111111',
     });
     expect(v.is_platform_admin).toBe(true);
+    if (v.is_platform_admin) {
+      expect(v.granted_by).toBeDefined();
+    }
+  });
+
+  // R-W11-MFA-TEST-01: handler returns 200/false for non-admins so the
+  // browser network panel doesn't log a red 403 on every staff session.
+  it('parses GET /admin/me (non-admin branch — null grant fields)', () => {
+    const v = AdminMe.parse({
+      user_id: '22222222-2222-2222-2222-222222222222',
+      is_platform_admin: false,
+      granted_at: null,
+      granted_by: null,
+      mfa_verified: false,
+    });
+    expect(v.is_platform_admin).toBe(false);
+    if (!v.is_platform_admin) {
+      expect(v.granted_at).toBeNull();
+      expect(v.granted_by).toBeNull();
+    }
+  });
+
+  it('rejects non-admin /admin/me payload that leaks grant fields (defense)', () => {
+    // The is_platform_admin: false branch MUST have granted_at + granted_by
+    // null. A regression that returns the real granted_at + granted_by on
+    // a revoked admin would be a sensitive-data leak — pin it shut.
+    expect(() =>
+      AdminMe.parse({
+        user_id: '22222222-2222-2222-2222-222222222222',
+        is_platform_admin: false,
+        granted_at: '2026-05-16T00:00:00Z',
+        granted_by: '11111111-1111-1111-1111-111111111111',
+      }),
+    ).toThrow();
   });
 
   it('parses GET /admin/organizations paginated list', () => {
@@ -392,15 +438,13 @@ describe('admin-console-api Phase 23 — security posture', () => {
   });
 
   // Wave 11 (R-W10-P23-OBS-02): MFA gate is layered on top of platform_admin.
+  // R-W11-MFA-TEST-01: /admin/me no longer gates on MFA at all (it's a
+  // status probe). Every other /admin/* handler does enforce MFA via
+  // requirePlatformAdmin, which composes:
+  //   1. decodeAdminJwt(req)            → UNAUTHORIZED if missing/malformed
+  //   2. SELECT platform_admins         → FORBIDDEN if none
+  //   3. requireMfaVerified(sb, userId) → MFA_REQUIRED if no verified TOTP
   it('platform_admin without verified TOTP gets MFA_REQUIRED 403', () => {
-    // The handler call chain is:
-    //   requirePlatformAdmin(req) →
-    //     1. decode JWT, throw UNAUTHORIZED if missing
-    //     2. SELECT platform_admins, throw FORBIDDEN if none
-    //     3. requireMfaVerified(sb, userId), throw MFA_REQUIRED if no factor
-    // The /admin/me handler opts step 3 out via { skipMfa: true }, but every
-    // other /admin/* handler enforces all three. We model the resulting wire
-    // envelope here so the SPA apiClient.ts can parse it deterministically.
     const envelope = {
       error: {
         code: 'MFA_REQUIRED',
@@ -412,8 +456,7 @@ describe('admin-console-api Phase 23 — security posture', () => {
   });
 
   it('/admin/me response carries mfa_verified so SPA can route to enrollment', () => {
-    const MeWithMfa = AdminMe.extend({ mfa_verified: z.boolean().optional() });
-    const v = MeWithMfa.parse({
+    const v = AdminMe.parse({
       user_id: '11111111-1111-1111-1111-111111111111',
       is_platform_admin: true,
       granted_at: '2026-05-16T00:00:00Z',

@@ -33,28 +33,24 @@ export interface PlatformAdminCaller {
 
 export interface RequirePlatformAdminOpts {
   /**
-   * Skip the MFA verification step. Used by `GET /admin/me` only — the SPA
-   * needs to be able to read its own platform-admin status BEFORE the user
-   * has enrolled an MFA factor, so it can redirect them to /admin/enroll-mfa.
-   * Every other handler leaves this false so MFA is mandatory.
+   * Skip the MFA verification step. Reserved for internal composition; the
+   * /admin/me probe no longer goes through requirePlatformAdmin at all — it
+   * calls `decodeAdminJwt` directly and reports admin status as a 200 body
+   * field instead of throwing 403 on non-admins (R-W11-MFA-TEST-01).
    */
   skipMfa?: boolean;
 }
 
 /**
- * Verify the caller is signed in AND has an active row in `platform_admins`.
- * Throws FORBIDDEN otherwise. We do NOT require an `team1_org_id` claim —
- * platform admins may be signed in without an active membership.
+ * Decode the caller's JWT and return `{userId, homeOrgId}`. Throws
+ * UNAUTHORIZED for a missing or malformed Authorization header — does NOT
+ * touch the database, does NOT check platform_admins, does NOT check MFA.
  *
- * Wave 11 (R-W10-P23-OBS-02): after the platform_admins lookup, we ALSO
- * require a verified TOTP factor on the caller's account. Throws
- * `MFA_REQUIRED` (403) when missing. `skipMfa: true` is reserved for the
- * /admin/me self-check the SPA uses to drive enrollment redirects.
+ * Used by both `requirePlatformAdmin` (which composes lookups on top) and
+ * by `GET /admin/me`, which needs the userId but reports admin status as
+ * a body field instead of throwing 403. See R-W11-MFA-TEST-01.
  */
-export async function requirePlatformAdmin(
-  req: Request,
-  opts: RequirePlatformAdminOpts = {},
-): Promise<PlatformAdminCaller> {
+export function decodeAdminJwt(req: Request): PlatformAdminCaller {
   // Decode the JWT manually rather than calling requireCallerStrict, because
   // the strict variant demands a non-null `team1_org_id` claim — platform
   // admins may not be members of any org.
@@ -67,8 +63,6 @@ export async function requirePlatformAdmin(
     throw new ApiError('UNAUTHORIZED', 'Authentication required.', 401);
   }
 
-  // Defer to the shared decoder via requireCallerStrict's lenient sibling
-  // (re-imported as needed). Here we inline the same shape for clarity.
   let userId: string | null = null;
   let homeOrgId: string | null = null;
   try {
@@ -88,17 +82,38 @@ export async function requirePlatformAdmin(
     throw new ApiError('UNAUTHORIZED', 'Authentication required.', 401);
   }
 
+  return { userId, homeOrgId };
+}
+
+/**
+ * Verify the caller is signed in AND has an active row in `platform_admins`.
+ * Throws FORBIDDEN otherwise. We do NOT require an `team1_org_id` claim —
+ * platform admins may be signed in without an active membership.
+ *
+ * Wave 11 (R-W10-P23-OBS-02): after the platform_admins lookup, we ALSO
+ * require a verified TOTP factor on the caller's account. Throws
+ * `MFA_REQUIRED` (403) when missing.
+ */
+export async function requirePlatformAdmin(
+  req: Request,
+  opts: RequirePlatformAdminOpts = {},
+): Promise<PlatformAdminCaller> {
+  const caller = decodeAdminJwt(req);
+
   // Single DB roundtrip — platform_admins lookup via the active partial index.
   const sb = admin();
   const { data, error } = await sb
     .from('platform_admins')
     .select('user_id, revoked_at')
-    .eq('user_id', userId)
+    .eq('user_id', caller.userId)
     .is('revoked_at', null)
     .maybeSingle();
 
   if (error) {
-    logError('platform_admin lookup failed', { user_id: userId, detail: error.message });
+    logError('platform_admin lookup failed', {
+      user_id: caller.userId,
+      detail: error.message,
+    });
     throw new ApiError('INTERNAL_ERROR', 'platform admin lookup failed', 500);
   }
   if (!data) {
@@ -106,14 +121,13 @@ export async function requirePlatformAdmin(
   }
 
   // ─── Wave 11 platform_admin MFA gate — Sub-agent A owns this block. ───
-  // Closes R-W10-P23-OBS-02. /admin/me is the only handler that opts out
-  // (so the SPA can detect platform-admin status before enrollment).
+  // Closes R-W10-P23-OBS-02.
   if (!opts.skipMfa) {
-    await requireMfaVerified(sb, userId, req);
+    await requireMfaVerified(sb, caller.userId, req);
   }
   // ─── End Wave 11 platform_admin MFA gate. ───
 
-  return { userId, homeOrgId };
+  return caller;
 }
 
 // Re-export so handlers can use the strict caller form if needed (e.g. for
