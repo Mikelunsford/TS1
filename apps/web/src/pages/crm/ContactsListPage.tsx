@@ -135,7 +135,12 @@ export default function ContactsListPage() {
               {filteredItems.map((c) => (
                 <tr key={c.id} className="hover:bg-bg-muted">
                   <td className="px-3 py-2 font-medium text-fg">
-                    {[c.first_name, c.last_name].filter(Boolean).join(' ')}
+                    <Link
+                      to={`/crm/contacts/${c.id}`}
+                      className="text-brand hover:underline"
+                    >
+                      {[c.first_name, c.last_name].filter(Boolean).join(' ')}
+                    </Link>
                     {c.is_primary && (
                       <span className="ml-2 text-xs uppercase tracking-wide text-fg-subtle">
                         Primary

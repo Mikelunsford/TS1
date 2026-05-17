@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { ConvertLeadDialog } from '@/components/crm/ConvertLeadDialog';
@@ -210,7 +210,11 @@ function LeadsTable({
         ) : (
           leads.map((lead) => (
             <tr key={lead.id} className="border-b border-border hover:bg-bg-subtle">
-              <td className="px-4 py-2 font-medium text-fg">{lead.display_name}</td>
+              <td className="px-4 py-2 font-medium text-fg">
+                <Link to={`/crm/leads/${lead.id}`} className="text-brand hover:underline">
+                  {lead.display_name}
+                </Link>
+              </td>
               <td className="px-4 py-2">
                 <LeadStatusBadge status={lead.status} />
               </td>
