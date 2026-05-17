@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { useOrgClaimSync } from '@/lib/hooks/useOrgClaimSync';
+
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -10,6 +12,11 @@ import { Topbar } from './Topbar';
  * AppShell.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  // R-W11-AUTH-01: auto-stamp team1_org_id claim on first sign-in when
+  // active_org_id is synthesized from sole-membership but the JWT carries
+  // no claim. One-shot per (user, org) per session mount.
+  useOrgClaimSync();
+
   return (
     <div className="flex h-screen flex-col bg-bg text-fg">
       <Topbar />
