@@ -20,12 +20,14 @@ import {
   Receipt,
   Send,
   Settings,
+  ShoppingCart,
   Sparkles,
   TrendingUp,
   Truck,
   Users,
   Wallet,
   Warehouse,
+  X,
 } from 'lucide-react';
 
 import { cn } from '@/lib/format';
@@ -34,8 +36,14 @@ import { useCapabilities } from '@/lib/hooks/useCapabilities';
 /**
  * Sidebar — primary module navigation.
  *
- * Modules per /03-workspace/04-GLOSSARY.md and /11-modules/00-MODULE-CATALOG.md.
- * Wave 2 lights up the CRM module with five sub-routes.
+ * UI-AUDIT PR A (2026-05-18): tree re-organized so Dashboard is its own
+ * top-level entry (no longer buried under Reports), a Sales group
+ * collects Quotes/Projects/Invoices/Payments/Credit notes, Operations
+ * is a collapse-only header (no `to:`), and Settings is gated on
+ * `org.settings.read` so non-admin roles can reach reference-data
+ * children. Below the `md:` breakpoint this renders as a slide-in
+ * drawer driven by AppShell state; at `md:` and above it stays a
+ * fixed `w-56` rail (unchanged desktop behavior).
  *
  * Category groups (those with `children`) collapse/expand on click. The
  * currently-active route auto-opens its parent category on mount and on
@@ -44,22 +52,27 @@ import { useCapabilities } from '@/lib/hooks/useCapabilities';
  */
 
 interface NavItem {
-  to: string;
+  /** Omit when the category is collapse-only (Operations). */
+  to?: string;
+  /** Stable key for open-state + active-parent tracking. */
+  key: string;
   label: string;
   icon: typeof Home;
   disabled?: boolean;
   /** Wave the route lands in. Used in tooltips on disabled items. */
   wave?: number;
-  /** Cap required to show this item. Omitted = always show (for the rest of
-   *  the modules; they will be cap-gated as their pages land). */
+  /** Cap required to show this item. Omitted = always show. */
   requireCap?: string;
-  children?: Array<{ to: string; label: string; icon: typeof Home }>;
+  children?: Array<{ to: string; label: string; icon: typeof Home; requireCap?: string }>;
 }
 
 const items: NavItem[] = [
-  { to: '/', label: 'Home', icon: Home },
+  // Dashboard — promoted to top-level (UI-AUDIT PR A). Previously buried
+  // as a child of Reports while `/` also redirected here; the old "Home"
+  // entry resolved to /dashboard but highlighted a Reports child.
+  { to: '/dashboard', key: '/dashboard', label: 'Dashboard', icon: Home },
   {
-    to: '/crm',
+    key: 'crm',
     label: 'CRM',
     icon: Users,
     children: [
@@ -70,16 +83,30 @@ const items: NavItem[] = [
       { to: '/crm/activities', label: 'Activities', icon: Activity },
     ],
   },
-  { to: '/quotes', label: 'Quotes', icon: FileText, requireCap: 'quotes.read' },
-  { to: '/projects', label: 'Projects', icon: ClipboardList, requireCap: 'projects.read' },
-  { to: '/invoices', label: 'Invoices', icon: Receipt, requireCap: 'invoices.read' },
-  // Payments + Credit Notes (Wave 5 / 5.3b) — FE-B owns this block.
-  { to: '/payments', label: 'Payments', icon: CreditCard, requireCap: 'payments.read' },
-  { to: '/credit-notes', label: 'Credit Notes', icon: Receipt, requireCap: 'credit_notes.read' },
-  // end payments + credit notes nav.
-  // Inventory (Wave 8f / Phase 13 — FE-A owns this block)
+  // Sales — new grouping (UI-AUDIT PR A). Collects the 5 previously
+  // disjoint top-level commercial-doc items under one collapsible.
   {
-    to: '/items',
+    key: 'sales',
+    label: 'Sales',
+    icon: ShoppingCart,
+    children: [
+      { to: '/quotes', label: 'Quotes', icon: FileText, requireCap: 'quotes.read' },
+      { to: '/projects', label: 'Projects', icon: ClipboardList, requireCap: 'projects.read' },
+      { to: '/invoices', label: 'Invoices', icon: Receipt, requireCap: 'invoices.read' },
+      { to: '/payments', label: 'Payments', icon: CreditCard, requireCap: 'payments.read' },
+      {
+        to: '/credit-notes',
+        label: 'Credit notes',
+        icon: Receipt,
+        requireCap: 'credit_notes.read',
+      },
+    ],
+  },
+  // Inventory (Wave 8f / Phase 13 — FE-A owns this block)
+  // Parent now collapse-only (no `to:`); previously aliased to /items
+  // which duplicated the first child's route.
+  {
+    key: 'inventory',
     label: 'Inventory',
     icon: Boxes,
     requireCap: 'inventory.warehouses.read',
@@ -92,12 +119,13 @@ const items: NavItem[] = [
   },
   // end inventory nav.
   // Operations / 3PL (Wave 8f / Phase 13 — FE-A owns this block)
+  // Parent is a non-navigable header per UI-AUDIT PR A spec.
   // Bundle-level gate on plugins.3pl lives on the BE (ops-api). On the SPA
   // we cap-gate on receiving.read; the role policy already aligns
   // receiving/production/shipping caps with the same role surface, so
   // hiding any one of them effectively hides the section.
   {
-    to: '/receiving',
+    key: 'operations',
     label: 'Operations',
     icon: Factory,
     requireCap: 'receiving.read',
@@ -109,8 +137,9 @@ const items: NavItem[] = [
   },
   // end operations nav.
   // Procurement (Wave 7 / Phase 10 — FE-A owns this block)
+  // Parent now collapse-only (was /vendors which duplicated first child).
   {
-    to: '/vendors',
+    key: 'procurement',
     label: 'Procurement',
     icon: Truck,
     requireCap: 'vendors.read',
@@ -122,8 +151,9 @@ const items: NavItem[] = [
   },
   // end procurement nav.
   // Expenses (Wave 7 / Phase 11 — FE-A owns this block)
+  // Parent now collapse-only (was /expenses which duplicated first child).
   {
-    to: '/expenses',
+    key: 'expenses',
     label: 'Expenses',
     icon: Wallet,
     requireCap: 'expenses.read',
@@ -133,10 +163,11 @@ const items: NavItem[] = [
     ],
   },
   // end expenses nav.
-  // Finance / GL (Wave 8c / Phase 12 — FE-A owns this block)
+  // Accounting — renamed from "Finance" (UI-AUDIT PR A). Parent now
+  // collapse-only (was /finance/accounts which duplicated first child).
   {
-    to: '/finance/accounts',
-    label: 'Finance',
+    key: 'accounting',
+    label: 'Accounting',
     icon: BookOpen,
     requireCap: 'finance.coa.read',
     children: [
@@ -144,15 +175,15 @@ const items: NavItem[] = [
       { to: '/finance/journal-entries', label: 'Journal entries', icon: Layers },
     ],
   },
-  // end finance / GL nav.
-  // Reports polish (Wave 10) — A1 owns this block.
+  // end accounting nav.
+  // Reports — Dashboard removed (now top-level). Parent collapse-only;
+  // previously aliased to /reports/ar-aging which duplicated first child.
   {
-    to: '/reports/ar-aging',
+    key: 'reports',
     label: 'Reports',
     icon: BarChart3,
     requireCap: 'finance.reports.read',
     children: [
-      { to: '/dashboard', label: 'Dashboard', icon: Home },
       { to: '/reports/ar-aging', label: 'AR aging', icon: BarChart3 },
       { to: '/reports/sales-by-customer', label: 'Sales by customer', icon: TrendingUp },
       { to: '/reports/sales-by-item', label: 'Sales by item', icon: Boxes },
@@ -160,28 +191,31 @@ const items: NavItem[] = [
       { to: '/reports/expense-by-category', label: 'Expense by category', icon: Receipt },
     ],
   },
-  // End Reports polish (Wave 10).
-  // Settings (Phase 15) — cap-gated to org_admin+. Phase15-FE block start.
+  // End Reports.
+  // Settings (Phase 15) — UI-AUDIT PR A re-gates from `org.settings.write`
+  // to `org.settings.read` so non-admin roles (sales/ops/accounting) can
+  // reach reference-data children like /settings/taxes. Per-child gates
+  // can filter further as they're declared.
   {
     to: '/settings',
+    key: '/settings',
     label: 'Settings',
     icon: Settings,
-    requireCap: 'org.settings.write',
+    requireCap: 'org.settings.read',
     children: [
       { to: '/settings/company', label: 'Company', icon: Settings },
+      { to: '/settings/branding', label: 'Branding', icon: Sparkles },
       { to: '/settings/invoicing', label: 'Invoicing', icon: Receipt },
       { to: '/settings/quoting', label: 'Quoting', icon: FileText },
-      { to: '/settings/finance', label: 'Finance', icon: BookOpen },
-      { to: '/settings/branding', label: 'Branding', icon: Sparkles },
-      { to: '/settings/clients', label: 'Clients', icon: Users },
       { to: '/settings/numbering', label: 'Numbering', icon: Layers },
+      { to: '/settings/finance', label: 'Finance', icon: BookOpen },
       { to: '/settings/currencies', label: 'Currencies', icon: Wallet },
       { to: '/settings/taxes', label: 'Taxes', icon: Receipt },
       { to: '/settings/payment-methods', label: 'Payment methods', icon: CreditCard },
       { to: '/settings/exchange-rates', label: 'Exchange rates', icon: TrendingUp },
+      { to: '/settings/clients', label: 'Clients', icon: Users },
     ],
   },
-  // /Phase15-FE block.
 ];
 
 const STORAGE_KEY = 'ts1.sidebar.openCategories.v1';
@@ -209,22 +243,31 @@ function writePersistedOpen(open: Set<string>): void {
 }
 
 /**
- * Return the parent `to` of the category whose own `to` or any child `to`
- * matches the current pathname. Null when no category contains the current
- * route (top-level routes like `/quotes`).
+ * Return the `key` of the category whose own `to` or any child `to`
+ * matches the current pathname. Null when no category contains the
+ * current route (top-level routes like `/dashboard`).
  */
 function findActiveParent(pathname: string): string | null {
   for (const item of items) {
     if (!item.children) continue;
-    if (pathname === item.to || pathname.startsWith(`${item.to}/`)) return item.to;
+    if (item.to && (pathname === item.to || pathname.startsWith(`${item.to}/`))) {
+      return item.key;
+    }
     for (const child of item.children) {
-      if (pathname === child.to || pathname.startsWith(`${child.to}/`)) return item.to;
+      if (pathname === child.to || pathname.startsWith(`${child.to}/`)) return item.key;
     }
   }
   return null;
 }
 
-export function Sidebar() {
+export interface SidebarProps {
+  /** Mobile drawer open state (controlled by AppShell). Ignored at `md:`+. */
+  mobileOpen?: boolean;
+  /** Called when the user clicks the drawer overlay or any nav link. */
+  onClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
   const { can } = useCapabilities();
   const { pathname } = useLocation();
   const activeParent = useMemo(() => findActiveParent(pathname), [pathname]);
@@ -262,11 +305,14 @@ export function Sidebar() {
     });
   };
 
-  return (
-    <nav
-      className="flex w-56 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4"
-      aria-label="Primary"
-    >
+  const handleNavClick = () => {
+    // Close the mobile drawer when the user picks a destination. No-op
+    // on desktop because AppShell never opens the drawer above `md:`.
+    if (onClose) onClose();
+  };
+
+  const navContent = (
+    <>
       {items.map((item) => {
         const Icon = item.icon;
         if (item.requireCap && !can(item.requireCap)) {
@@ -275,7 +321,7 @@ export function Sidebar() {
         if (item.disabled) {
           return (
             <span
-              key={item.to}
+              key={item.key}
               className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-subtle"
               title={item.wave ? `Wave ${item.wave}` : 'Coming soon'}
               aria-disabled
@@ -286,14 +332,20 @@ export function Sidebar() {
           );
         }
         const hasChildren = !!item.children?.length;
-        const isOpen = hasChildren && openCategories.has(item.to);
-        const isActiveCategory = activeParent === item.to;
+        // Filter children by their own caps; if a parent has children but
+        // none survive cap-gating, hide the parent entirely.
+        const visibleChildren = hasChildren
+          ? item.children!.filter((c) => !c.requireCap || can(c.requireCap))
+          : [];
+        if (hasChildren && visibleChildren.length === 0) return null;
+        const isOpen = hasChildren && openCategories.has(item.key);
+        const isActiveCategory = activeParent === item.key;
         return (
-          <div key={item.to} className="flex flex-col gap-0.5">
+          <div key={item.key} className="flex flex-col gap-0.5">
             {hasChildren ? (
               <button
                 type="button"
-                onClick={() => toggleCategory(item.to)}
+                onClick={() => toggleCategory(item.key)}
                 aria-expanded={isOpen}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm',
@@ -312,8 +364,9 @@ export function Sidebar() {
               </button>
             ) : (
               <NavLink
-                to={item.to}
+                to={item.to!}
                 end={item.to === '/'}
+                onClick={handleNavClick}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm',
@@ -329,12 +382,13 @@ export function Sidebar() {
             )}
             {hasChildren && isOpen && (
               <div className="ml-6 flex flex-col gap-0.5 border-l border-border pl-2">
-                {item.children!.map((child) => {
+                {visibleChildren.map((child) => {
                   const ChildIcon = child.icon;
                   return (
                     <NavLink
                       key={child.to}
                       to={child.to}
+                      onClick={handleNavClick}
                       className={({ isActive }) =>
                         cn(
                           'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
@@ -354,6 +408,50 @@ export function Sidebar() {
           </div>
         );
       })}
-    </nav>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile overlay — only visible below `md:` when drawer is open. */}
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={onClose}
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+        />
+      )}
+
+      {/* Desktop rail (md+) — fixed width, in-flow. */}
+      <nav
+        className="hidden w-56 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4 md:flex"
+        aria-label="Primary"
+      >
+        {navContent}
+      </nav>
+
+      {/* Mobile drawer (< md) — overlays content, slides in from left. */}
+      <nav
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-64 flex-col gap-1 border-r border-border bg-bg-muted px-3 py-4 shadow-xl transition-transform duration-200 md:hidden',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+        aria-label="Primary navigation"
+        aria-hidden={!mobileOpen}
+      >
+        <div className="mb-2 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close navigation"
+            className="rounded-md p-1 text-fg-muted hover:bg-bg hover:text-fg"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        {navContent}
+      </nav>
+    </>
   );
 }
