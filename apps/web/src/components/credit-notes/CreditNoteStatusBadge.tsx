@@ -1,23 +1,17 @@
 /**
  * CreditNoteStatusBadge — colored badge for the four credit_notes.status
- * values (CHECK constraint values, verified 2026-05-15). Mirrors the
- * QuoteStatusBadge tone vocabulary.
+ * CHECK-constraint values (verified 2026-05-15).
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around <StatusBadge>.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { CreditNoteStatus } from '@/lib/types';
 
-const STATUS_CLASSES: Record<CreditNoteStatus, string> = {
-  draft: 'bg-bg-muted text-fg ring-1 ring-border',
-  issued: 'bg-info/10 text-info ring-1 ring-info/30',
-  applied: 'bg-success/10 text-success ring-1 ring-success/30',
-  voided: 'bg-danger/10 text-danger ring-1 ring-danger/30',
-};
-
-const STATUS_LABELS: Record<CreditNoteStatus, string> = {
-  draft: 'Draft',
-  issued: 'Issued',
-  applied: 'Applied',
-  voided: 'Voided',
+const TONE: Record<CreditNoteStatus, { tone: Tone; label: string }> = {
+  draft: { tone: 'neutral', label: 'Draft' },
+  issued: { tone: 'info', label: 'Issued' },
+  applied: { tone: 'success', label: 'Applied' },
+  voided: { tone: 'danger', label: 'Voided' },
 };
 
 export function CreditNoteStatusBadge({
@@ -27,15 +21,14 @@ export function CreditNoteStatusBadge({
   status: CreditNoteStatus;
   className?: string;
 }) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Credit note status: ${label}`}
+      testId={`credit-note-status-${status}`}
+      className={className}
+    />
   );
 }

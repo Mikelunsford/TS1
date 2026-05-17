@@ -7,6 +7,13 @@
  *
  * Wave 8f / Phase 13. `quantity_available` on stock_levels is a STORED
  * generated column (qoh - qreserved). The SPA never writes it.
+ *
+ * UI-audit refactor (2026-05-18): does NOT fold into the shared
+ * <StatusBadge> primitive. The display string is dense and idiosyncratic
+ * ("5 avail / 7 oh (R 2)"), and the `font-mono` is intentional so the
+ * digit columns align in tables. Instead the audit gap is closed by adding
+ * (a) a `title` tooltip explaining the avail/oh/R glossary and (b) an
+ * `aria-label` that reads naturally to screen readers.
  */
 import { cn } from '@/lib/cn';
 
@@ -35,7 +42,13 @@ export function StockLevelBadge({
       : tone === 'warning'
         ? 'bg-warning/10 text-warning ring-1 ring-warning/30'
         : 'bg-success/10 text-success ring-1 ring-success/30';
-  const reservedSeg = qreserved !== undefined ? ` (R ${stockAsNumber(qreserved)})` : '';
+  const availNum = stockAsNumber(qavailable);
+  const qohNum = stockAsNumber(qoh);
+  const reservedNum = qreserved !== undefined ? stockAsNumber(qreserved) : undefined;
+  const reservedSeg = reservedNum !== undefined ? ` (R ${reservedNum})` : '';
+  const reservedSrSeg = reservedNum !== undefined ? `, ${reservedNum} reserved` : '';
+  const ariaLabel = `Stock level: ${availNum} available, ${qohNum} on hand${reservedSrSeg}`;
+  const tooltip = 'avail = available to sell · oh = on hand · R = reserved';
   return (
     <span
       className={cn(
@@ -45,8 +58,10 @@ export function StockLevelBadge({
       )}
       data-testid="stock-level-badge"
       data-tone={tone}
+      title={tooltip}
+      aria-label={ariaLabel}
     >
-      {stockAsNumber(qavailable)} avail / {stockAsNumber(qoh)} oh{reservedSeg}
+      {availNum} avail / {qohNum} oh{reservedSeg}
     </span>
   );
 }

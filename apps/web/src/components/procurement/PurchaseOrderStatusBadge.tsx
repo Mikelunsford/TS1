@@ -3,28 +3,24 @@
  * schema_migrations=0058 / prod `purchase_orders.status` text CHECK).
  *
  * Constitutional invariant: state spelling is `partial_received` (one r).
+ *
+ * UI-audit refactor (2026-05-18): thin wrapper around <StatusBadge>. The
+ * audit called out that `received` and `closed` rendered identically
+ * (both emerald) — both terminal but only `received` should imply "won"
+ * brightness. `closed` now uses `tone='muted'` so the two terminal states
+ * are visually distinguishable.
  */
-import { cn } from '@/lib/cn';
+import { StatusBadge, type Tone } from '@/components/ui/StatusBadge';
 import type { PurchaseOrderState } from '@/lib/workflow';
 
-const STATUS_CLASSES: Record<PurchaseOrderState, string> = {
-  draft: 'bg-bg-muted text-fg ring-1 ring-border',
-  submitted: 'bg-info/10 text-info ring-1 ring-info/30',
-  approved: 'bg-info/10 text-info ring-1 ring-info/30',
-  partial_received: 'bg-warning/10 text-warning ring-1 ring-warning/30',
-  received: 'bg-success/10 text-success ring-1 ring-success/30',
-  closed: 'bg-success/10 text-success ring-1 ring-success/30',
-  cancelled: 'bg-bg-muted text-fg-muted ring-1 ring-border',
-};
-
-const STATUS_LABELS: Record<PurchaseOrderState, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  approved: 'Approved',
-  partial_received: 'Partially received',
-  received: 'Received',
-  closed: 'Closed',
-  cancelled: 'Cancelled',
+const TONE: Record<PurchaseOrderState, { tone: Tone; label: string }> = {
+  draft: { tone: 'neutral', label: 'Draft' },
+  submitted: { tone: 'info', label: 'Submitted' },
+  approved: { tone: 'info', label: 'Approved' },
+  partial_received: { tone: 'warning', label: 'Partially received' },
+  received: { tone: 'success', label: 'Received' },
+  closed: { tone: 'muted', label: 'Closed' },
+  cancelled: { tone: 'muted', label: 'Cancelled' },
 };
 
 export function PurchaseOrderStatusBadge({
@@ -34,16 +30,14 @@ export function PurchaseOrderStatusBadge({
   status: PurchaseOrderState;
   className?: string;
 }) {
+  const { tone, label } = TONE[status];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-        className,
-      )}
-      data-testid={`po-status-${status}`}
-    >
-      {STATUS_LABELS[status]}
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={label}
+      ariaLabel={`Purchase order status: ${label}`}
+      testId={`po-status-${status}`}
+      className={className}
+    />
   );
 }

@@ -7,6 +7,7 @@ import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { can } from '@/lib/capabilities';
 import { formatDate } from '@/lib/formatDate';
@@ -115,18 +116,25 @@ export default function ProjectsListPage() {
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Status filter">
-        <StatusChip
+      <div
+        className="flex flex-wrap gap-2"
+        role="group"
+        aria-label="Status filter"
+        data-testid="status-chips"
+      >
+        <FilterChip
           label="All"
           active={status === ''}
           onClick={() => update({ status: '' })}
+          testId="status-chip-all"
         />
         {STATUS_FILTERS.map((s) => (
-          <StatusChip
+          <FilterChip
             key={s}
             label={s.replace(/_/g, ' ')}
             active={status === s}
             onClick={() => update({ status: s })}
+            testId={`status-chip-${s}`}
           />
         ))}
       </div>
@@ -221,27 +229,3 @@ export default function ProjectsListPage() {
   );
 }
 
-function StatusChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={
-        active
-          ? 'rounded-full bg-brand px-3 py-1 text-xs font-medium capitalize text-brand-fg'
-          : 'rounded-full border border-border bg-bg px-3 py-1 text-xs capitalize text-fg-muted hover:bg-bg-muted'
-      }
-    >
-      {label}
-    </button>
-  );
-}

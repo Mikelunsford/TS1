@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
-import { StatusBadge, type ClientStatus } from '@/components/ui/StatusBadge';
+import { ClientStatusBadge, type ClientStatus } from '@/components/ui/ClientStatusBadge';
 import { formatMoney } from '@/lib/money';
 import { customerKeys } from '@/lib/queryKeys/crm';
 import { listCustomers } from '@/lib/services/customersService';
@@ -194,7 +194,7 @@ export default function CustomersListPage() {
                       </div>
                     </td>
                     <td className="px-3 py-2">
-                      <StatusBadge status={c.client_status} />
+                      <ClientStatusBadge status={c.client_status} />
                     </td>
                     <td className="px-3 py-2">
                       {c.primary_email ?? <span className="text-fg-subtle">—</span>}

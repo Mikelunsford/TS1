@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/Badge';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ClientStatusBadge } from '@/components/ui/ClientStatusBadge';
 import type { Customer } from '@/lib/types';
 import { formatMoney } from '@/lib/money';
 
@@ -32,7 +32,7 @@ export function CustomerOverviewCard({ customer }: { customer: Customer }) {
         <h2 id="customer-overview-heading" className="text-xl font-semibold">
           {customer.display_name}
         </h2>
-        <StatusBadge status={customer.client_status} />
+        <ClientStatusBadge status={customer.client_status} />
         <Badge tone="neutral">{customer.kind === 'company' ? 'Company' : 'Individual'}</Badge>
       </header>
 

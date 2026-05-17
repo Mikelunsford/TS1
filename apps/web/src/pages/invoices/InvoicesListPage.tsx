@@ -19,8 +19,8 @@ import { PaymentStatusBadge } from '@/components/invoices/PaymentStatusBadge';
 import { MoneyDisplay } from '@/components/inventory/MoneyDisplay';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { TableSkeleton } from '@/components/ui/Skeleton';
-import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { useCapabilities } from '@/lib/hooks/useCapabilities';
 import { invoiceKeys } from '@/lib/queryKeys/invoices';
@@ -186,26 +186,15 @@ export default function InvoicesListPage() {
         aria-label="Status filter"
         data-testid="status-chips"
       >
-        {STATUS_VALUES.map((s) => {
-          const active = status === s;
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => toggleStatus(s)}
-              aria-pressed={active}
-              className={cn(
-                'rounded-full border px-3 py-0.5 text-xs font-medium',
-                active
-                  ? 'border-brand bg-brand text-brand-fg'
-                  : 'border-border bg-bg text-fg-muted hover:bg-bg-muted',
-              )}
-              data-testid={`status-chip-${s}`}
-            >
-              {s}
-            </button>
-          );
-        })}
+        {STATUS_VALUES.map((s) => (
+          <FilterChip
+            key={s}
+            label={s}
+            active={status === s}
+            onClick={() => toggleStatus(s)}
+            testId={`status-chip-${s}`}
+          />
+        ))}
       </div>
 
       {query.isLoading && <TableSkeleton rows={6} cols={7} />}
