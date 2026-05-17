@@ -35,26 +35,21 @@ export async function hasVerifiedTotp(
   sb: SupabaseClient,
   userId: string,
 ): Promise<boolean> {
-  // auth.mfa_factors is in the `auth` schema; service-role bypasses RLS so
-  // the admin client can read it directly. `head: false` + count keeps the
-  // query an existence check (we don't need the rows themselves).
-  const { count, error } = await sb
-    .schema('auth')
-    .from('mfa_factors')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('factor_type', 'totp')
-    .eq('status', 'verified');
+  // auth.mfa_factors lives in the `auth` schema, which is NOT exposed to
+  // PostgREST (supabase/config.toml only exposes `public` + `graphql_public`).
+  // Querying it via `sb.schema('auth').from('mfa_factors')` returns an error
+  // and 500'd every platform_admin.* endpoint in prod. Migration 0075 ships
+  // `public.has_verified_totp(uuid)` SECURITY DEFINER wrapper; we call that
+  // via RPC instead. Surfacing transient errors as INTERNAL_ERROR rather than
+  // silently downgrading to "deny" — a DB failure must not bypass the gate.
+  const { data, error } = await sb.rpc('has_verified_totp', { p_user_id: userId });
 
   if (error) {
-    // Surfacing the underlying error as INTERNAL_ERROR rather than treating
-    // it as "no MFA" — a transient DB failure must not silently downgrade
-    // the gate to "deny".
     throw new ApiError('INTERNAL_ERROR', 'mfa factor lookup failed', 500, {
       detail: error.message,
     });
   }
-  return (count ?? 0) > 0;
+  return data === true;
 }
 
 export async function requireMfaVerified(
