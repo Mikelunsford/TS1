@@ -15,6 +15,10 @@ const AdminMeSchema = z.object({
   is_platform_admin: z.literal(true),
   granted_at: z.string(),
   granted_by: z.string().uuid(),
+  // Wave 11 (R-W10-P23-OBS-02) — added so the SPA can route to
+  // /admin/enroll-mfa before the user hits MFA_REQUIRED on a real handler.
+  // Optional for backward compat with stale workers during rollout.
+  mfa_verified: z.boolean().optional(),
 });
 export type AdminMe = z.infer<typeof AdminMeSchema>;
 
@@ -68,6 +72,9 @@ const ImpersonateResponseSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string().nullable(),
   expires_in: z.number().int().positive(),
+  // Wave 11 (R-W10-P23-OBS-01) — ISO timestamp the SPA banner uses to
+  // enforce the 15-minute TTL.
+  expires_at: z.string().optional(),
   impersonated_user_id: z.string().uuid(),
   impersonated_email: z.string().nullable().optional(),
   org_id: z.string().uuid(),

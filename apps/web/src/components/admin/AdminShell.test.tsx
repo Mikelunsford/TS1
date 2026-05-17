@@ -28,13 +28,36 @@ vi.mock('./useImpersonation', () => ({
   useImpersonation: () => useImpersonationMock(),
 }));
 
-function withProviders(child: React.ReactNode) {
+function withProviders(child: React.ReactNode, initialPath = '/admin') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/admin']}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
+          {/* For /admin route the test renders AdminShell directly. For
+              /admin/enroll-mfa we route to a sentinel so the MFA-missing
+              redirect test can detect that the Navigate fired. */}
           <Route path="/admin" element={child} />
+          <Route
+            path="/admin/enroll-mfa"
+            element={<div data-testid="redirected-enroll">enroll</div>}
+          />
+          <Route path="/" element={<div data-testid="redirected-home">home</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function withProvidersOnEnroll(child: React.ReactNode) {
+  // Variant used for the "renders on /admin/enroll-mfa" test, where the
+  // enrollment route IS the AdminShell-wrapped one so we can assert chrome.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/admin/enroll-mfa']}>
+        <Routes>
+          <Route path="/admin/enroll-mfa" element={child} />
           <Route path="/" element={<div data-testid="redirected-home">home</div>} />
         </Routes>
       </MemoryRouter>
@@ -49,9 +72,9 @@ describe('AdminShell', () => {
     expect(screen.getByText(/Verifying platform admin/i)).toBeInTheDocument();
   });
 
-  it('renders admin chrome for platform admin', () => {
+  it('renders admin chrome for platform admin with verified MFA', () => {
     useIsPlatformAdminMock.mockReturnValue({
-      data: { isPlatformAdmin: true, me: { user_id: 'u1' } },
+      data: { isPlatformAdmin: true, me: { user_id: 'u1', mfa_verified: true } },
       isLoading: false,
     });
     render(withProviders(<AdminShell><div data-testid="kid">kid</div></AdminShell>));
@@ -67,5 +90,33 @@ describe('AdminShell', () => {
     });
     render(withProviders(<AdminShell><div>kid</div></AdminShell>));
     expect(screen.getByTestId('redirected-home')).toBeInTheDocument();
+  });
+
+  // Wave 11 (R-W10-P23-OBS-02) — platform admin without MFA gets bounced to
+  // the enrollment page on any non-enrollment admin route.
+  it('redirects platform admin without MFA to /admin/enroll-mfa', () => {
+    useIsPlatformAdminMock.mockReturnValue({
+      data: { isPlatformAdmin: true, me: { user_id: 'u1', mfa_verified: false } },
+      isLoading: false,
+    });
+    render(withProviders(<AdminShell><div data-testid="kid">kid</div></AdminShell>));
+    // Shell should not render its chrome — Navigate redirects to the
+    // enrollment sentinel.
+    expect(screen.getByTestId('redirected-enroll')).toBeInTheDocument();
+    expect(screen.queryByText(/Platform Admin Console/i)).not.toBeInTheDocument();
+  });
+
+  // The shell DOES render on the enrollment route itself so the page can be
+  // wrapped in admin chrome without looping.
+  it('renders on /admin/enroll-mfa even without verified MFA', () => {
+    useIsPlatformAdminMock.mockReturnValue({
+      data: { isPlatformAdmin: true, me: { user_id: 'u1', mfa_verified: false } },
+      isLoading: false,
+    });
+    render(
+      withProvidersOnEnroll(<AdminShell><div data-testid="kid">kid</div></AdminShell>),
+    );
+    expect(screen.getByText(/Platform Admin Console/i)).toBeInTheDocument();
+    expect(screen.getByTestId('kid')).toBeInTheDocument();
   });
 });

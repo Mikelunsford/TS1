@@ -18,6 +18,10 @@ export interface ImpersonationSession {
   impersonatedEmail: string | null;
   orgId: string;
   startedAt: string;
+  // Wave 11 (R-W10-P23-OBS-01) — ISO timestamp; the banner auto-ends the
+  // session when this elapses. Optional so older sessionStorage payloads
+  // don't break the deserializer on first paint after deploy.
+  expiresAt?: string;
 }
 
 export interface UseImpersonation {

@@ -168,7 +168,9 @@ test.describe('Phase 23 admin console e2e', () => {
       expect(impRes.status).toBe(201);
       const impBody = await impRes.json();
       expect(impBody.data.session_id).toBeTruthy();
-      expect(impBody.data.expires_in).toBe(3600);
+      // Wave 11 (R-W10-P23-OBS-01): impersonation TTL was 3600 → now 900s.
+      expect(impBody.data.expires_in).toBe(900);
+      expect(typeof impBody.data.expires_at).toBe('string');
       const sessionId = impBody.data.session_id as string;
 
       // 5. Verify impersonation_sessions row.

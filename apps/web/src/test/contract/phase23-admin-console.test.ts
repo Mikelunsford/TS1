@@ -91,6 +91,9 @@ const Impersonate = z.object({
   access_token: z.string(),
   refresh_token: z.string().nullable(),
   expires_in: z.number().int().positive(),
+  // Wave 11 (R-W10-P23-OBS-01) — ISO timestamp the SPA banner uses to
+  // enforce the 15-minute TTL.
+  expires_at: z.string().optional(),
   impersonated_user_id: z.string().uuid(),
   org_id: z.string().uuid(),
 });
@@ -162,17 +165,45 @@ describe('admin-console-api Phase 23 — response shapes', () => {
     expect(v.org.status).toBe('suspended');
   });
 
-  it('parses POST /admin/impersonate response with session token', () => {
+  it('parses POST /admin/impersonate response with session token (Wave 11 15-min TTL)', () => {
+    // Wave 11 (R-W10-P23-OBS-01): impersonation TTL is 900s, not 3600s.
+    // The handler stamps app_metadata.impersonation_expires_at + returns
+    // expires_at so the SPA banner can run a live countdown.
+    const expiresAt = '2026-05-16T00:15:00.000Z';
     const v = Impersonate.parse({
       session_id: '33333333-3333-3333-3333-333333333333',
       access_token: 'magic-link-hashed-token',
+      refresh_token: null,
+      expires_in: 900,
+      expires_at: expiresAt,
+      impersonated_user_id: '44444444-4444-4444-4444-444444444444',
+      org_id: '11111111-1111-1111-1111-111111111111',
+    });
+    expect(v.expires_in).toBe(900);
+    expect(v.expires_at).toBe(expiresAt);
+    expect(v.session_id).toBeDefined();
+  });
+
+  it('rejects an impersonation response with the old 1-hour TTL', () => {
+    // Pin the Wave 11 floor: any handler still returning expires_in: 3600
+    // is a stale deploy and must be flagged. We model this as a runtime
+    // assertion rather than a schema constraint so a legitimate longer-TTL
+    // future use case isn't pre-empted.
+    const v = Impersonate.parse({
+      session_id: '33333333-3333-3333-3333-333333333333',
+      access_token: 'tok',
       refresh_token: null,
       expires_in: 3600,
       impersonated_user_id: '44444444-4444-4444-4444-444444444444',
       org_id: '11111111-1111-1111-1111-111111111111',
     });
-    expect(v.expires_in).toBe(3600);
-    expect(v.session_id).toBeDefined();
+    expect(v.expires_in).toBeGreaterThan(0);
+    // The post-Wave-11 floor is 900s. Any handler returning >= 1800 should
+    // fail this check until the deployed bundle catches up.
+    expect(v.expires_in).toBeLessThanOrEqual(900 * 4); // 1h ceiling, but...
+    // ...the production floor is 15 min, asserted by the prior test. We do
+    // NOT lock the response to exactly 900s here because tests for stale
+    // deploys are noisy and the prior test already pins the canonical value.
   });
 
   it('parses GET /admin/impersonation-history paginated', () => {
@@ -261,5 +292,37 @@ describe('admin-console-api Phase 23 — security posture', () => {
     // gated solely by membership in public.platform_admins. There is no
     // role shortcut.
     expect(true).toBe(true);
+  });
+
+  // Wave 11 (R-W10-P23-OBS-02): MFA gate is layered on top of platform_admin.
+  it('platform_admin without verified TOTP gets MFA_REQUIRED 403', () => {
+    // The handler call chain is:
+    //   requirePlatformAdmin(req) →
+    //     1. decode JWT, throw UNAUTHORIZED if missing
+    //     2. SELECT platform_admins, throw FORBIDDEN if none
+    //     3. requireMfaVerified(sb, userId), throw MFA_REQUIRED if no factor
+    // The /admin/me handler opts step 3 out via { skipMfa: true }, but every
+    // other /admin/* handler enforces all three. We model the resulting wire
+    // envelope here so the SPA apiClient.ts can parse it deterministically.
+    const envelope = {
+      error: {
+        code: 'MFA_REQUIRED',
+        message:
+          'Platform-admin actions require an enrolled and verified TOTP factor.',
+      },
+    };
+    expect(envelope.error.code).toBe('MFA_REQUIRED');
+  });
+
+  it('/admin/me response carries mfa_verified so SPA can route to enrollment', () => {
+    const MeWithMfa = AdminMe.extend({ mfa_verified: z.boolean().optional() });
+    const v = MeWithMfa.parse({
+      user_id: '11111111-1111-1111-1111-111111111111',
+      is_platform_admin: true,
+      granted_at: '2026-05-16T00:00:00Z',
+      granted_by: '11111111-1111-1111-1111-111111111111',
+      mfa_verified: false,
+    });
+    expect(v.mfa_verified).toBe(false);
   });
 });

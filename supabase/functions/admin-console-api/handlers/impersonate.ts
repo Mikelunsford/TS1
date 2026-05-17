@@ -25,8 +25,18 @@
  *
  * Token revocation on "end": we cannot revoke an already-issued JWT; we set
  * `ended_at` on the session row + clear the `impersonated_by` claim. The
- * client banner is the source of truth for "currently impersonating", and
- * the JWT is short-lived (1 hour default).
+ * client banner is the source of truth for "currently impersonating".
+ *
+ * Wave 11 (R-W10-P23-OBS-01): impersonation TTL is now 15 minutes (was 1h).
+ * The Supabase JS SDK 2.45.0 does NOT expose an `expires_in` option on
+ * `auth.admin.generateLink`, so we tighten the window two ways instead:
+ *   1. Stamp `app_metadata.impersonation_expires_at` (ISO timestamp 15 min
+ *      ahead). The SPA's <EndImpersonationBanner> reads this claim from the
+ *      session and forcibly ends the impersonation when it elapses.
+ *   2. Return `expires_in: 900` in the response so the banner can render a
+ *      live countdown.
+ * The magic-link token itself still inherits the Supabase project's default
+ * link TTL — we cap the IMPERSONATION SESSION, not the auth link.
  */
 
 import type { Ctx } from '../../_shared/route.ts';
@@ -88,6 +98,12 @@ export async function impersonate({ req }: Ctx): Promise<Response> {
         (memData as { roles: { code: string } | null }).roles?.code ?? 'viewer';
 
       // 3. Stamp claims on the user so the next session carries correct context.
+      // Wave 11 (R-W10-P23-OBS-01): impersonation_expires_at is the hard TTL
+      // the SPA banner enforces. 15 min ahead of NOW.
+      const IMPERSONATION_TTL_SECONDS = 900; // 15 min
+      const expiresAtIso = new Date(
+        Date.now() + IMPERSONATION_TTL_SECONDS * 1000,
+      ).toISOString();
       const existingAppMeta = (target.app_metadata ?? {}) as Record<string, unknown>;
       const { error: updErr } = await sb.auth.admin.updateUserById(body.user_id, {
         app_metadata: {
@@ -96,6 +112,7 @@ export async function impersonate({ req }: Ctx): Promise<Response> {
           team1_org_role: targetRole,
           impersonated_by: caller.userId,
           impersonation_reason: body.reason,
+          impersonation_expires_at: expiresAtIso,
         },
       });
       if (updErr) {
@@ -156,8 +173,8 @@ export async function impersonate({ req }: Ctx): Promise<Response> {
         throw new ApiError('INTERNAL_ERROR', 'hashed_token missing from generateLink', 500);
       }
 
-      // Default Supabase JWT expiry is 3600s; we pass it back so the banner
-      // can show a countdown.
+      // Wave 11 (R-W10-P23-OBS-01): impersonation window is 15 min, enforced
+      // by the SPA banner against impersonation_expires_at in app_metadata.
       return {
         status: 201,
         body: {
@@ -165,7 +182,8 @@ export async function impersonate({ req }: Ctx): Promise<Response> {
             session_id: sessRow.id,
             access_token: hashedToken, // SPA uses verifyOtp(token_hash) to redeem
             refresh_token: null,
-            expires_in: 3600,
+            expires_in: IMPERSONATION_TTL_SECONDS,
+            expires_at: expiresAtIso,
             impersonated_user_id: body.user_id,
             impersonated_email: target.email,
             org_id: body.org_id,
@@ -211,6 +229,8 @@ export async function endImpersonation({ req }: Ctx): Promise<Response> {
         const meta = { ...(target.user.app_metadata ?? {}) } as Record<string, unknown>;
         delete meta.impersonated_by;
         delete meta.impersonation_reason;
+        // Wave 11 (R-W10-P23-OBS-01): clear TTL claim alongside the others.
+        delete meta.impersonation_expires_at;
         await sb.auth.admin.updateUserById(sess.impersonated_user_id, { app_metadata: meta });
       }
 
