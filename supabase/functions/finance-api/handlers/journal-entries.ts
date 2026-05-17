@@ -45,6 +45,19 @@ import {
   type JournalEntryLineInput,
 } from '../../_shared/types.ts';
 import { assertTransition, WorkflowError } from '../../_shared/workflow.ts';
+
+// ─── Period-close trigger → 422 PERIOD_CLOSED envelope ─────────────────────
+// Migration 0074 (Wave 11C) installs a BEFORE INSERT OR UPDATE OF entry_date
+// trigger on journal_entries that RAISEs 'period_closed: ...' (SQLSTATE
+// P0001) when the entry_date falls inside any closed period for the org.
+// We detect that here by message-prefix because PostgREST surfaces the
+// exception as a generic error object (the SQLSTATE is in `code` on the
+// error). Either signal is sufficient.
+function isPeriodClosedError(e: { message?: string; code?: string } | null | undefined): boolean {
+  if (!e) return false;
+  if (e.code === 'P0001' && (e.message ?? '').includes('period_closed')) return true;
+  return (e.message ?? '').startsWith('period_closed');
+}
 import {
   admin,
   decodeCursor,
@@ -321,6 +334,14 @@ export async function createJournalEntry({ req }: Ctx): Promise<Response> {
           .select(JE_COLS)
           .single();
         if (error || !data) {
+          if (isPeriodClosedError(error)) {
+            throw new ApiError(
+              'PERIOD_CLOSED',
+              'Cannot post a journal entry into a closed accounting period.',
+              422,
+              { detail: error?.message },
+            );
+          }
           throw new ApiError('INTERNAL_ERROR', 'journal_entries insert failed', 500, {
             detail: error?.message,
           });
@@ -434,6 +455,14 @@ export async function patchJournalEntry({ req, params }: Ctx): Promise<Response>
           .select(JE_COLS)
           .single();
         if (error || !data) {
+          if (isPeriodClosedError(error)) {
+            throw new ApiError(
+              'PERIOD_CLOSED',
+              'Cannot move a journal entry into a closed accounting period.',
+              422,
+              { detail: error?.message },
+            );
+          }
           throw new ApiError('INTERNAL_ERROR', 'journal_entries update failed', 500, {
             detail: error?.message,
           });

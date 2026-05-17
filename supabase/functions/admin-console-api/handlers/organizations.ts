@@ -10,6 +10,7 @@ import { ok, ApiError } from '../../_shared/responses.ts';
 import { admin, parseBody, respondWithIdempotency } from '../_helpers.ts';
 import { requirePlatformAdmin } from '../platform-admin.ts';
 import { writeAudit } from '../../_shared/audit.ts';
+import { DEFAULT_FEATURE_FLAGS } from '../../_shared/feature-defaults.ts';
 import { ProvisionOrgSchema, SuspendOrgSchema } from '../schemas.ts';
 
 interface OrgRow {
@@ -278,10 +279,69 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
           is_active: true,
         });
       if (memErr) {
+        // Best-effort compensating delete on the org row. PostgREST doesn't
+        // give us a real txn so we DELETE the freshly-created org to avoid
+        // orphans. RLS-clean because admin() is service-role.
+        await sb.from('organizations').delete().eq('id', org.id);
         throw new ApiError('INTERNAL_ERROR', 'membership insert failed', 500, {
           detail: memErr.message,
         });
       }
+
+      // 6. Seed per-org defaults (Wave 11C R-W11-PROVISION-01).
+      //    seed_org_defaults is idempotent per migration 0074 — re-runs
+      //    safe via per-org NOT EXISTS guards.
+      const { error: seedErr } = await sb.rpc('seed_org_defaults', {
+        p_org_id: org.id,
+      });
+      if (seedErr) {
+        // Compensating rollback: delete membership + org. Best-effort —
+        // PostgREST has no cross-statement txn.
+        await sb.from('org_memberships').delete().eq('org_id', org.id);
+        await sb.from('organizations').delete().eq('id', org.id);
+        throw new ApiError('INTERNAL_ERROR', 'org defaults seed failed', 500, {
+          detail: seedErr.message,
+        });
+      }
+
+      // 7. Seed default feature flags. Use upsert so re-running on partial
+      //    failure is harmless.
+      const flagRows = Object.entries(DEFAULT_FEATURE_FLAGS).map(([flag_key, is_enabled]) => ({
+        org_id: org.id,
+        flag_key,
+        is_enabled,
+        config: {},
+        created_by: caller.userId,
+        updated_by: caller.userId,
+      }));
+      const { error: flagErr } = await sb
+        .from('org_feature_flags')
+        .upsert(flagRows, { onConflict: 'org_id,flag_key' });
+      if (flagErr) {
+        // Non-fatal: log via audit but don't roll back the whole org. An
+        // org without flags is recoverable (admin can re-run via console).
+        await writeAudit({
+          actor_user_id: caller.userId,
+          org_id: org.id,
+          entity_type: 'organization',
+          entity_id: org.id,
+          action: 'platform_admin.provision.feature_flags_warn',
+          after: { error: flagErr.message },
+          notes: 'feature flag seed partially failed; org left in default-false state',
+        });
+      }
+
+      // 8. Hydrate seeded counts so the SPA can show "13 accounts, 1 warehouse".
+      const [{ count: coaCount }, { count: warehouseCount }] = await Promise.all([
+        sb
+          .from('chart_of_accounts')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id),
+        sb
+          .from('warehouses')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.id),
+      ]);
 
       await writeAudit({
         actor_user_id: caller.userId,
@@ -289,13 +349,26 @@ export async function provisionOrganization({ req }: Ctx): Promise<Response> {
         entity_type: 'organization',
         entity_id: org.id,
         action: 'platform_admin.provision',
-        after: { slug: org.slug, display_name: org.display_name, owner_email: body.owner_email },
+        after: {
+          slug: org.slug,
+          display_name: org.display_name,
+          owner_email: body.owner_email,
+          coa_count: coaCount ?? 0,
+          warehouse_count: warehouseCount ?? 0,
+        },
         notes: `platform admin ${caller.userId} provisioned new org`,
       });
 
       return {
         status: 201,
-        body: { data: { org, owner_user_id: ownerUserId } },
+        body: {
+          data: {
+            org,
+            owner_user_id: ownerUserId,
+            coa_count: coaCount ?? 0,
+            warehouse_count: warehouseCount ?? 0,
+          },
+        },
       };
     },
   );
